@@ -101,6 +101,22 @@ test('a source client fingerprints the source entry through the stat-validated c
   }
 });
 
+test('a built client replays the dist signature from the stat-validated cache, reading no chunk', async () => {
+  resetAllProcessMemosForTests();
+  const spec = resolveDaemonLaunchSpec();
+  if (spec.useSrc) return;
+  const expected = computeDaemonCodeSignature(spec.distPath, spec.root);
+  assert.equal(await ownCheckoutCodeSignature(), expected);
+
+  const readSpy = vi.spyOn(fs, 'readFileSync');
+  assert.equal(await ownCheckoutCodeSignature(), expected);
+  const distReads = readSpy.mock.calls
+    .map(([target]) => target)
+    .filter((target): target is string => typeof target === 'string')
+    .filter((target) => target.startsWith(path.join(spec.root, 'dist')));
+  assert.deepEqual(distReads, []);
+});
+
 test('a reachable daemon newer than the client is refused, not replaced', async () => {
   assert.deepEqual(
     await resolveDaemonTakeover(runningDaemon({ version: '999.0.0' }), reachable()),

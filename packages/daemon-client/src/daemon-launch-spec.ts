@@ -9,10 +9,7 @@ import {
 } from '@agent-device/host-kit/version';
 import { createTtlMemo } from '@agent-device/kernel/ttl-memo';
 
-import {
-  computeDaemonCodeSignature,
-  resolveDaemonCodeOrigin,
-} from '@agent-device/host-kit/code-signature';
+import { resolveDaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import type { DaemonInfo, DaemonTakeoverDecision } from './daemon-client-metadata.ts';
 
 type DaemonLaunchSpec = {
@@ -77,13 +74,14 @@ export type LocalDaemonCodeIdentity =
 /**
  * This tree's answer, read afresh on every call.
  *
- * A dist entry is a bundle of ~120 chunks and walks in ~5ms; a source checkout's graph
- * — ~1,500 modules once the workspace packages the daemon imports by specifier are
- * counted — costs tens of milliseconds and goes through the stat-validated cache
- * (`code-signature-cache.ts`), which replays the identical signature from `statSync`
- * alone. That cache loads on demand, which is why this is async: only the checkout arm
- * can reach it, and a static import would put it and its atomic-publish dependency in
- * the startup closure of every client that cannot use it (`eager-closure-budgets.ts`).
+ * Both arms go through the stat-validated cache (`code-signature-cache.ts`), which replays the
+ * identical signature from `statSync` alone and re-walks whenever any recorded file changed, so a
+ * rebuild or an edit invalidates it. A source checkout's graph is ~1,500 modules and costs tens of
+ * milliseconds to walk. A dist entry is a bundle of ~120 chunks: its walk reads and scans every
+ * chunk, ~5 to 10 ms on each CLI call, where the cache only stats them. That cache loads on demand,
+ * which is why this is async: an installed tree never reaches it, and a static import would put it
+ * and its atomic-publish dependency in the startup closure of every client
+ * (`eager-closure-budgets.ts`).
  *
  * Deliberately NOT memoized, unlike the launch spec above: a long-lived client (the
  * MCP server) must still notice a daemon rebuilt underneath it, and the cache is what
@@ -93,17 +91,12 @@ export async function resolveLocalDaemonCodeIdentity(): Promise<LocalDaemonCodeI
   const launchSpec = resolveDaemonLaunchSpec();
   const origin = resolveDaemonCodeOrigin(launchSpec.root);
   if (origin === 'installed') return { origin };
-  if (!launchSpec.useSrc) {
-    return {
-      origin,
-      codeSignature: computeDaemonCodeSignature(launchSpec.distPath, launchSpec.root),
-    };
-  }
   const { resolveCachedDaemonCodeSignature } =
     await import('@agent-device/host-kit/code-signature-cache');
+  const entryPath = launchSpec.useSrc ? launchSpec.srcPath : launchSpec.distPath;
   return {
     origin,
-    codeSignature: await resolveCachedDaemonCodeSignature(launchSpec.srcPath, launchSpec.root),
+    codeSignature: await resolveCachedDaemonCodeSignature(entryPath, launchSpec.root),
   };
 }
 
