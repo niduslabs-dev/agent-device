@@ -3,6 +3,7 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
+  matchesDeviceNameSelector,
   resolveRequestAppleSimulatorSetPath,
   webSessionDevice,
   type DeviceInfo,
@@ -154,15 +155,66 @@ export async function resolveTargetDeviceSelection(
         return await selectScopedDevice(cacheResolvedTargetDevice(cacheKey, selection), options);
       }
 
-      const selection = await resolveInventorySelection({
-        devices,
-        selector,
-        source: inventory.source,
-        boot: options.boot,
-      });
+      let selection: DeviceSelectionResult;
+      try {
+        selection = await resolveInventorySelection({
+          devices,
+          selector,
+          source: inventory.source,
+          boot: options.boot,
+        });
+      } catch (error) {
+        if (
+          inventory.source === 'local' &&
+          inventoryRequest.androidAvdSelection === 'running-only'
+        ) {
+          await throwIfNamedDeviceIsStopped(error, inventoryRequest);
+        }
+        throw error;
+      }
       return await selectScopedDevice(cacheResolvedTargetDevice(cacheKey, selection), options);
     },
     diagnosticData,
+  );
+}
+
+/** `details.reason` when `--device` names a stopped emulator for a command that never boots one. */
+const DEVICE_NOT_BOOTED_REASON = 'device_not_booted';
+
+/**
+ * A command that never boots reads only running Android devices, so `--device` naming a stopped
+ * AVD that `devices` lists used to fail as "No device named" with a hint to run `devices` again.
+ * On that miss, look the name up once more with stopped AVDs included. A stopped match fails with
+ * `DEVICE_NOT_BOOTED_REASON` and the boot command, and it never boots the device itself.
+ */
+async function throwIfNamedDeviceIsStopped(
+  error: unknown,
+  request: DeviceInventoryRequest,
+): Promise<void> {
+  const deviceName = request.deviceName;
+  if (!(error instanceof AppError) || error.code !== 'DEVICE_NOT_FOUND') return;
+  if (!deviceName || request.udid || request.serial) return;
+  if (request.platform && request.platform !== 'android') return;
+  const stopped = (
+    await listLocalDeviceInventory({ ...request, androidAvdSelection: 'include-stopped' })
+  ).find(
+    (device) =>
+      device.platform === 'android' &&
+      device.booted !== true &&
+      matchesDeviceNameSelector(device, deviceName),
+  );
+  if (!stopped) return;
+  const bootCommand = `agent-device boot --device ${JSON.stringify(stopped.name)} --platform android`;
+  throw new AppError(
+    'DEVICE_NOT_FOUND',
+    `Device ${JSON.stringify(stopped.name)} is shut down. This command needs a booted device.`,
+    {
+      reason: DEVICE_NOT_BOOTED_REASON,
+      device: stopped.name,
+      platform: 'android',
+      hint: `Run \`${bootCommand}\`, then retry.`,
+      dispatched: 'no',
+    },
   );
 }
 
