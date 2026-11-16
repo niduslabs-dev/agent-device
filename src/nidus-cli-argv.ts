@@ -16,15 +16,15 @@ import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { runEntry } from './entry.ts';
+import { runEntry } from './cli/entry.ts';
 import {
   capturedCliExit,
   refuseCapturedCli,
   runCapturedCli,
   writeCapturedCli,
   type CapturedCliOutcome,
-} from './nidus-cli-capture.ts';
-import { resolveCliOptions } from './resolve-cli-options.ts';
+} from './cli/nidus-cli-capture.ts';
+import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 
 declare const __AGENT_DEVICE_VERSION__: string;
 
@@ -174,11 +174,11 @@ async function runEntryLikeBin(
   await runEntry(
     argv,
     {
-      help: () => import('../commands/schema/cli-help.ts'),
+      help: () => import('./commands/schema/cli-help.ts'),
       cli: async () => {
         const [{ runCliProcess }, { runCli }] = await Promise.all([
-          import('./process-entry.ts'),
-          import('../cli.ts'),
+          import('./cli/process-entry.ts'),
+          import('./cli.ts'),
         ]);
         return {
           runCliProcess: (cliArgv) =>
@@ -190,7 +190,7 @@ async function runEntryLikeBin(
       },
       mcp: async () => ({ runAgentDeviceMcpServer: () => refuseCapturedCli('command:mcp') }),
       version: () => import('@agent-device/host-kit/version'),
-      processExit: () => import('./process-exit.ts'),
+      processExit: () => import('./cli/process-exit.ts'),
     },
     {
       bundledVersion:

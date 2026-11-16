@@ -1,6 +1,7 @@
 // Fork-only (Nidus Labs): lets a long-lived process (the daemon's CLI worker) run the Node CLI's
 // own code for a native client and collect exactly what that CLI would have printed.
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { interceptCliExit } from './process-exit.ts';
 
 /** One write, in order: `1` is stdout and `2` is stderr. */
 export type CapturedCliWrite = readonly [fd: 1 | 2, text: string];
@@ -83,6 +84,7 @@ export function refuseCapturedCli(reason: string): Promise<never> {
 function routeProcessStreams(): void {
   if (streamsRouted) return;
   streamsRouted = true;
+  interceptCliExit(capturedCliExit);
   routeStream(process.stdout, 1);
   routeStream(process.stderr, 2);
 }

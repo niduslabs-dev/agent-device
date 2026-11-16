@@ -9,7 +9,10 @@ import { findProjectRoot } from '@agent-device/host-kit/version';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isRecord } from '@agent-device/kernel/record';
 import { runNidusCliArgv } from './nidus-cli-argv.ts';
-import type { NidusCliWorkerReply, NidusCliWorkerRequest } from './nidus-cli-worker-protocol.ts';
+import type {
+  NidusCliWorkerReply,
+  NidusCliWorkerRequest,
+} from './cli/nidus-cli-worker-protocol.ts';
 
 const STALE_REPLY: DaemonResponse = {
   ok: true,

@@ -30,14 +30,34 @@ import type {
 import type {
   DaemonRequest,
   DaemonResponse,
+  DaemonTransport,
   DaemonTransportOptions,
 } from './daemon-client-request.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
+import type { NidusAttachedTransportOptions } from './nidus-attached-transport.ts';
 
 export type { DaemonRequest, DaemonResponse };
 export { readRegisteredDaemon };
 export type { DaemonInfo };
-export { createNidusAttachedTransport } from './nidus-attached-transport.ts';
+
+/**
+ * Fork-only (Nidus Labs): the attach-only transport of `nidus-attached-transport.ts`, loaded on its
+ * first request so no client pays for it at startup.
+ */
+export function createNidusAttachedTransport(
+  send: DaemonTransport,
+  options: NidusAttachedTransportOptions,
+): DaemonTransport {
+  let attached: Promise<DaemonTransport> | undefined;
+  return async (req, context) => {
+    attached ??= import('./nidus-attached-transport.ts').then((module) =>
+      module.createNidusAttachedTransport(send, options),
+    );
+    return await (
+      await attached
+    )(req, context);
+  };
+}
 
 /** The released default: a process-level client, which reads the process's own host. */
 export async function sendToDaemon(

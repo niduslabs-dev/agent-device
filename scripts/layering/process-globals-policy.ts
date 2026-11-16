@@ -10,6 +10,8 @@ const PROCESS_ENTRIES = new Set([
   'src/bin.ts',
   'src/cli.ts',
   'src/daemon.ts',
+  // Fork-only (Nidus Labs): the daemon's CLI worker executable.
+  'src/nidus-cli-worker.ts',
   'packages/client/src/index.ts',
   'src/host.ts',
   'packages/capture-kit/src/png-worker.ts',

@@ -133,7 +133,7 @@ function resolveWorkerEntry(): string | undefined {
   const here = fileURLToPath(import.meta.url);
   const directory = path.dirname(here);
   const candidates = here.endsWith('.ts')
-    ? [path.join(directory, 'cli', 'nidus-cli-worker.ts')]
+    ? [path.join(directory, 'nidus-cli-worker.ts')]
     : [
         path.join(directory, 'nidus-cli-worker.js'),
         path.join(directory, 'internal', 'nidus-cli-worker.js'),

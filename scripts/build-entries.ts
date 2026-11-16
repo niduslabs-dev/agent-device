@@ -22,7 +22,7 @@ export const buildEntries = {
   'internal/png-worker': 'packages/capture-kit/src/png-worker.ts',
   'internal/update-check-entry': 'src/cli/update-check-entry.ts',
   // Fork-only (Nidus Labs): the daemon's CLI worker process for the native thin client.
-  'internal/nidus-cli-worker': 'src/cli/nidus-cli-worker.ts',
+  'internal/nidus-cli-worker': 'src/nidus-cli-worker.ts',
 } as const;
 
 /**
