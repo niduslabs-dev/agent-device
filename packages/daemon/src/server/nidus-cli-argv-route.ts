@@ -49,21 +49,18 @@ export function routeNidusCliArgv(
 
 /**
  * The daemon runtime's mount: `route` replaces the dispatch, and `fromSocket` wraps the handler the
- * socket server gets, so only requests that arrived there reach the runner. Without a runner the
- * route is the dispatch itself.
+ * socket server gets, so only requests that arrived there reach the runner.
  */
 export function mountNidusCliArgv(
   dispatch: DaemonInvokeFn,
-  options: Readonly<{ token: string; baseDir: string; runner: NidusCliArgvRunner | undefined }>,
+  options: Readonly<{ token: string; baseDir: string; runner: NidusCliArgvRunner }>,
 ): { route: DaemonInvokeFn; fromSocket: (handle: DaemonInvokeFn) => DaemonInvokeFn } {
-  const { runner } = options;
-  if (!runner) return { route: dispatch, fromSocket: (handle) => handle };
   const socketRequests = new WeakSet<DaemonRequest>();
   return {
     route: routeNidusCliArgv(dispatch, {
       token: options.token,
       baseDir: options.baseDir,
-      runner,
+      runner: options.runner,
       admits: (req) => socketRequests.has(req),
     }),
     fromSocket: (handle) => async (req) => {

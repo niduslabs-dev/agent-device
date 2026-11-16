@@ -19,13 +19,16 @@
  */
 export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // Fork-only (Nidus Labs): `src/nidus-cli-worker-host.ts` is the daemon executable's own handle
-  // on its CLI worker process, loaded only by `src/daemon.ts`.
+  // on its CLI worker process, loaded only by `src/daemon.ts`. `src/nidus-cli-worker.ts` is that
+  // worker's executable, and `src/nidus-cli-argv.ts` its run of `src/cli.ts`.
   '(root)': [
     'src/bin.ts',
     'src/cli.ts',
     'src/daemon.ts',
     'src/host.ts',
+    'src/nidus-cli-argv.ts',
     'src/nidus-cli-worker-host.ts',
+    'src/nidus-cli-worker.ts',
   ],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],

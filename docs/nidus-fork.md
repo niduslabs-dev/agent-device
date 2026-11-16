@@ -29,7 +29,7 @@ Fork-only files use a `nidus` name so upstream rebases do not conflict:
 `clients/nidus-native/` is a Swift client (macOS 15+, no dependencies). It does not parse or
 render anything itself. It sends the raw argv, its cwd and its environment to the running daemon
 as a `nidus_cli_argv` request. The daemon hands the run to its CLI worker process, which runs the
-Node CLI's own entry, parser, client and formatters on it (`src/cli/nidus-cli-argv.ts`). The
+Node CLI's own entry, parser, client and formatters on it (`src/nidus-cli-argv.ts`). The
 answer is every stdout and stderr write in order plus the exit code. The output is the Node CLI's
 by construction.
 
@@ -45,7 +45,7 @@ The client finds the agent-device tree by walking up from its own path, or from
   (another version, other code, a policy, a dead or foreign lock owner, no socket port);
 - stderr is a terminal, a remote daemon or a daemon policy is set in the environment;
 - the daemon hands the run back as client-only. Each CLI command is classified in
-  `src/cli/nidus-cli-argv.ts`, and a unit test fails until a new upstream command is classified.
+  `src/nidus-cli-argv.ts`, and a unit test fails until a new upstream command is classified.
   Client-only runs include remote connections and auth, `daemon`, `install`, `replay`, `test`,
   `record`, `web`, `cdp`, `mcp`, `--debug`, `--text-stdin`, and a config that names another state
   dir.
@@ -64,7 +64,7 @@ clients and requires byte-identical output, and checks the worker's start, repla
 
 ### The CLI worker
 
-The daemon never loads the CLI's code. It spawns one worker (`src/cli/nidus-cli-worker.ts`,
+The daemon never loads the CLI's code. It spawns one worker (`src/nidus-cli-worker.ts`,
 handled by `src/nidus-cli-worker-host.ts`) and talks to it over a Node IPC channel. The worker
 holds no device state: each request of a run goes back to the daemon over its socket.
 

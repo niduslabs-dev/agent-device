@@ -1,4 +1,4 @@
-import type { ComposeDaemonRuntimeDeps } from './daemon-runtime-deps.ts';
+import type { ComposeDaemonRuntimeDeps, DaemonRuntimeDeps } from './daemon-runtime-deps.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import {
@@ -57,7 +57,6 @@ import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemo
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
-import { mountNidusCliArgv } from '../nidus-cli-argv-route.ts';
 import { processOwnsActiveDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
@@ -504,11 +503,7 @@ async function startDaemonRuntimeOnHost(
   });
 
   // Fork-only (Nidus Labs): the native client's raw-argv route, answered on the socket only.
-  const nidusRoute = mountNidusCliArgv(dispatchRequest, {
-    token,
-    baseDir,
-    runner: deps.nidusCliArgv,
-  });
+  const nidusRoute = await mountNidusRoute(dispatchRequest, deps.nidusCliArgv, token, baseDir);
   const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
     idleReap.cancel();
     const dispatch = runtimeState.run(() => nidusRoute.route(req));
@@ -927,4 +922,19 @@ async function startDaemonRuntimeOnHost(
     token,
     identity: Object.freeze({ ...daemonIdentity }),
   };
+}
+
+/**
+ * Fork-only (Nidus Labs): the raw-argv route when the root composed a runner for it, loaded only
+ * then; otherwise the dispatch as it is.
+ */
+async function mountNidusRoute(
+  dispatch: DaemonInvokeFn,
+  runner: DaemonRuntimeDeps['nidusCliArgv'],
+  token: string,
+  baseDir: string,
+): Promise<{ route: DaemonInvokeFn; fromSocket: (handle: DaemonInvokeFn) => DaemonInvokeFn }> {
+  if (!runner) return { route: dispatch, fromSocket: (handle) => handle };
+  const { mountNidusCliArgv } = await import('../nidus-cli-argv-route.ts');
+  return mountNidusCliArgv(dispatch, { token, baseDir, runner });
 }

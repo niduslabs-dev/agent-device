@@ -1,7 +1,18 @@
 import { sleep } from '@agent-device/host-kit/retry';
-import { capturedCliExit } from './nidus-cli-capture.ts';
 
 const FLUSH_TIMEOUT_MS = 2000;
+
+/** Ends a run without ending the process: a promise that never settles, or undefined to exit. */
+type CliExitInterceptor = (code: number) => Promise<never> | undefined;
+let exitInterceptor: CliExitInterceptor | undefined;
+
+/**
+ * Fork-only (Nidus Labs): lets a process that runs many CLI runs (the daemon's CLI worker) end one
+ * run at its exit instead of ending itself. An ordinary CLI process never sets it.
+ */
+export function interceptCliExit(interceptor: CliExitInterceptor): void {
+  exitInterceptor = interceptor;
+}
 
 /**
  * `process.exit()` truncates output still queued on `process.stdout`/`stderr`:
@@ -14,8 +25,8 @@ const FLUSH_TIMEOUT_MS = 2000;
  * rather than hanging the process.
  */
 export async function exitAfterFlush(code: number): Promise<never> {
-  const captured = capturedCliExit(code);
-  if (captured) return await captured;
+  const intercepted = exitInterceptor?.(code);
+  if (intercepted) return await intercepted;
   await Promise.race([drainStdio(), sleep(FLUSH_TIMEOUT_MS)]);
   process.exit(code);
 }
