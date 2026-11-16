@@ -46,6 +46,8 @@
     // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
     "src/cli/update-check-entry.ts",
+    // Fork-only (Nidus Labs): the daemon spawns its CLI worker by path.
+    "src/cli/nidus-cli-worker.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",
     "examples/sdk/contracts-result.ts",
