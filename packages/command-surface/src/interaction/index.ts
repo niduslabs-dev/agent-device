@@ -383,7 +383,7 @@ const interactionCliSchemas = {
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'record'],
   },
   click: {
-    usageOverride: 'click <x y|@ref|@ref,...|selector>',
+    usageOverride: 'click <x y|@ref|@ref,...|selector|name>',
     usageFlags: [],
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
@@ -395,7 +395,7 @@ const interactionCliSchemas = {
     ],
   },
   press: {
-    usageOverride: 'press <x y|@ref|@ref,...|selector>',
+    usageOverride: 'press <x y|@ref|@ref,...|selector|name>',
     usageFlags: [],
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
@@ -406,7 +406,7 @@ const interactionCliSchemas = {
     ],
   },
   longpress: {
-    usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
+    usageOverride: 'longpress <x y|@ref|selector|name> [durationMs]',
     usageFlags: [],
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
@@ -445,7 +445,7 @@ const interactionCliSchemas = {
   },
   fill: {
     usageOverride:
-      'fill <x> <y> <text> | fill <@ref|selector> <text> | fill <x y|@ref|selector> --text-stdin',
+      'fill <x> <y> <text> | fill <@ref|selector|name> <text> | fill <x y|@ref|selector> --text-stdin',
     usageFlags: [],
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
