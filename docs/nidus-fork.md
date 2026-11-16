@@ -18,6 +18,9 @@ See `git log upstream/main..main` for the exact list. In short:
 - Android emulator input (taps, swipes, scrolls, back, home) goes through the emulator's own gRPC
   endpoint instead of the snapshot helper (ADR 0041).
 - iOS simulator taps go through the simulator's digitizer instead of XCTest (ADR 0005).
+- iOS `back` still presses the back button when UIKit rests the navigation bar a rounding error
+  off a whole point; upstream's exact frame comparison then refuses every `back` until the app
+  restarts.
 - A native thin client (below) that runs a command in about 10 ms instead of about 150 ms.
 
 Fork-only files use a `nidus` name so upstream rebases do not conflict:

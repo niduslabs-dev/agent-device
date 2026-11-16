@@ -848,6 +848,26 @@ extension RunnerTests {
     XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: snapshotButton, geometry: fullScreen))
   }
 
+  /// UIKit can rest a bar a rounding error off a whole point, and the snapshot and the live read
+  /// then differ in the last digits. That is the same button; one that moved by a pixel is not.
+  func testNavigationBarBackStateHoldsALiveButtonARoundingErrorAway() {
+    let snapshotButton = CGRect(x: 16, y: 62.000000000000014, width: 44, height: 44)
+    let state = NavigationBarBackState(barCount: 1, backButtonLabels: ["Settings"], backButtonFrames: [snapshotButton])
+    let fullScreen = SurfaceGeometry(
+      windowOnScreen: SurfaceRect(CGRect(x: 0, y: 0, width: 402, height: 874)),
+      panelNativeSize: nil,
+      orientation: RunnerInterfaceOrientation.portrait
+    )
+
+    let rounded = CGRect(x: 16, y: 62, width: 44, height: 44)
+    XCTAssertNotEqual(rounded, snapshotButton)
+    XCTAssertTrue(Self.navigationBarBackState(state, holdsButton: rounded, geometry: fullScreen))
+    let onePixelLower = rounded.offsetBy(dx: 0, dy: 1.0 / 3.0)
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: onePixelLower, geometry: fullScreen))
+    let onePixelTaller = CGRect(x: 16, y: 62, width: 44, height: 44 + 1.0 / 3.0)
+    XCTAssertFalse(Self.navigationBarBackState(state, holdsButton: onePixelTaller, geometry: fullScreen))
+  }
+
   /// After the tap, only a change of the bar count, the back button count, a back button label, or,
   /// for a back button with no label, a bar title shows a pop. A back button that only moved, such as by a large-title collapse, shows none, but
   /// it is never a still bar before the tap.
