@@ -24,6 +24,7 @@ import type {
   SettleTailEntry,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
+import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
@@ -101,6 +102,12 @@ export type SettleObservationCommandOptions = CommandContext &
   SettleParams & {
     /** The pre-action tree the settled diff is taken against, and the surface it describes. */
     baseline: SurfaceScopedNodes;
+    /**
+     * The action redraws the baseline's screen in place (`settings appearance`, `settings
+     * text-size`) rather than navigating, so a quiet capture much sparser than the baseline is the
+     * redraw still in progress and does not settle ({@link redrawRecoveredGate}).
+     */
+    redrawsInPlace?: boolean;
   };
 
 /**
@@ -133,7 +140,11 @@ export const settleObservationCommand: RuntimeCommand<
 async function settleAfterAction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
-  params: SettleParams & { baseline: SurfaceScopedNodes; actionPoint?: Point },
+  params: SettleParams & {
+    baseline: SurfaceScopedNodes;
+    actionPoint?: Point;
+    redrawsInPlace?: boolean;
+  },
 ): Promise<SettleOutcome> {
   // The loop resolves an unrequested window from the capture that pays it, so the window is only
   // known once one is taken. `base` carries the general default for the pre-capture shape the
@@ -149,11 +160,18 @@ async function settleAfterAction(
   };
   let outcome: StableCaptureLoopResult | undefined;
   try {
+    const settleGate = params.redrawsInPlace
+      ? redrawRecoveredGate(
+          params.baseline.nodes,
+          (await runtime.sessions.get(options.session ?? 'default'))?.appBundleId,
+        )
+      : undefined;
     outcome = await runStableCaptureLoop(runtime, options, {
       ...(params.quietMs === undefined ? {} : { quietMs: params.quietMs }),
       timeoutMs,
       resetBudgetOnPrivateAxRecovery: true,
       broadTransitionBaseline: params.baseline,
+      ...(settleGate ? { settleGate } : {}),
     });
     if (outcome.failure) return settleUnavailable(base, outcome, outcome.failure.error);
     return await readSettledOutcome(runtime, options, params, base, outcome);
@@ -161,6 +179,40 @@ async function settleAfterAction(
     return settleUnavailable(base, outcome, error);
   }
 }
+
+/**
+ * The share of the baseline's meaningful nodes a capture must keep to settle a redraw in place.
+ * A redraw keeps the same screen, so its settled tree should carry about what the screen carried
+ * before. Android recreates the activity on an appearance change and can publish a quiet but blank
+ * tree (toolbar present, list empty) for longer than the quiet window: settling on it reported a
+ * finished redraw after 732 ms while the list filled about 4 s later. Half leaves room for a redraw
+ * that legitimately shows less, such as larger text pushing rows off screen.
+ */
+const REDRAW_MIN_MEANINGFUL_NODE_RATIO = 0.5;
+
+/**
+ * Admits a capture as settled only when it keeps at least {@link REDRAW_MIN_MEANINGFUL_NODE_RATIO}
+ * of the baseline's meaningful nodes. A meaningful node shows text (label, value, or identifier)
+ * and is not settle chrome, so a keyboard that hides during the redraw does not count as loss.
+ */
+function redrawRecoveredGate(
+  baselineNodes: SnapshotNode[],
+  appBundleId: string | undefined,
+): ((snapshot: SnapshotState) => boolean) | undefined {
+  const baselineCount = countMeaningfulNodes(baselineNodes, appBundleId);
+  if (baselineCount === 0) return undefined;
+  const minimum = baselineCount * REDRAW_MIN_MEANINGFUL_NODE_RATIO;
+  return (snapshot) => countMeaningfulNodes(snapshot.nodes, appBundleId) >= minimum;
+}
+
+function countMeaningfulNodes(nodes: SnapshotNode[], appBundleId: string | undefined): number {
+  return withoutSettleChrome(nodes, appBundleId).filter(
+    (node) => displayLabel(node, formatRole(node.type ?? 'Element')) !== '',
+  ).length;
+}
+
+const SPARSER_THAN_BASELINE_HINT =
+  'The screen stayed much emptier than before the change for the whole settle budget, so it may still be redrawing. Take a screenshot or snapshot before acting.';
 
 /** Turns a finished stable-capture loop into the settled observation payload. */
 async function readSettledOutcome(
@@ -178,6 +230,7 @@ async function readSettledOutcome(
     // The window the loop actually ran. For an unrequested settle that is the one its own captures
     // priced, which `base` cannot know because it is built before the first read.
     quietMs: outcome.quietMs,
+    ...(outcome.settleGateHeld ? { reason: 'tree-sparser-than-baseline' as const } : {}),
   };
   if (!outcome.lastCapture) {
     return {
@@ -214,7 +267,9 @@ async function readSettledOutcome(
             session?.appBundleId,
           )
         : {}),
-      ...resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange),
+      ...(outcome.settleGateHeld
+        ? { hint: SPARSER_THAN_BASELINE_HINT }
+        : resolveSettleHint(outcome, stored, settledNodes.length, surfaceChange)),
     },
     settledCapture,
   };

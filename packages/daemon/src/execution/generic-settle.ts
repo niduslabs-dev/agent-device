@@ -92,18 +92,28 @@ export async function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  return { observe: await planImpliedSettleObservation(params, settle) };
+  return { observe: await planSettleObservation(params, settle) };
 }
 
 /**
- * A settle the command owes without `--settle`, for a mutation that redraws the whole UI with no
- * target to resolve (`settings appearance`, `settings text-size`). It freezes the same baseline and
- * runs the same best-effort loop as `--settle`. Call it before the mutation and before the ref
- * frame expires, and run the observer after the mutation returns.
+ * A settle the command owes without `--settle`, for a mutation that redraws the whole UI in place
+ * with no target to resolve (`settings appearance`, `settings text-size`). It freezes the same
+ * baseline and runs the same best-effort loop as `--settle`, except that a quiet capture much
+ * sparser than the baseline does not settle it: the screen is the same one, still redrawing. That
+ * rule stays off plain `--settle`, whose `back` and `scroll` can legitimately land on a smaller
+ * screen. Call it before the mutation and before the ref frame expires, and run the observer after
+ * the mutation returns.
  */
 export async function planImpliedSettleObservation(
   params: GenericSettleContext,
   settle: SettleParams,
+): Promise<GenericSettleObserver> {
+  return await planSettleObservation(params, { ...settle, redrawsInPlace: true });
+}
+
+async function planSettleObservation(
+  params: GenericSettleContext,
+  settle: SettleParams & { redrawsInPlace?: boolean },
 ): Promise<GenericSettleObserver> {
   const { presentedSurface: _unverified, ...frame } = surfaceScopedNodes(
     refFrameTree(params.session),
@@ -137,7 +147,7 @@ function storedTreeBaseline(snapshot: SnapshotState | undefined): SurfaceScopedN
  */
 async function observeSettled(
   context: GenericSettleContext,
-  settle: SettleParams,
+  settle: SettleParams & { redrawsInPlace?: boolean },
   baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
   const runtime = await createGenericSettleRuntime(context);

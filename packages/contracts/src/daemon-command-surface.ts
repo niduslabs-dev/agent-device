@@ -300,6 +300,8 @@ export type DaemonSettleObservationOptions = CommandContext &
   Readonly<{
     /** The pre-action tree the settled diff is taken against, and the surface it describes. */
     baseline: SurfaceScopedNodes;
+    /** The action redraws the baseline's screen in place; see `SettleObservationCommandOptions`. */
+    redrawsInPlace?: boolean;
   }>;
 
 /**

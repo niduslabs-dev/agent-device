@@ -84,6 +84,7 @@ test.each([
     expect(settleCalls).toHaveLength(1);
     expect(settleCalls[0]?.mutationsSoFar).toBe(1);
     expect(settleCalls[0]?.options.session).toBe('android-settings-settle');
+    expect(settleCalls[0]?.options.redrawsInPlace).toBe(true);
   },
 );
 
