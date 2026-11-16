@@ -38,6 +38,14 @@ function hostEnv(baseDir: string): Record<string, string> {
   return env;
 }
 
+/** One request, served by a daemon whose host has the same home and temp dir as the client. */
+async function run(baseDir: string, overrides: Parameters<typeof request>[1] = {}) {
+  return await runNidusCliArgv(request(baseDir, overrides), {
+    env: hostEnv(baseDir),
+    cwd: baseDir,
+  });
+}
+
 function clientOnlyReason(response: Awaited<ReturnType<typeof runNidusCliArgv>>): unknown {
   expect(response.ok).toBe(true);
   return response.ok ? (response.data as { outcome: string; reason?: string }) : undefined;
@@ -45,27 +53,25 @@ function clientOnlyReason(response: Awaited<ReturnType<typeof runNidusCliArgv>>)
 
 test('a client-only command is handed back before anything runs', async () => {
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
-  const response = await runNidusCliArgv(request(baseDir, { argv: ['connect'] }));
+  const response = await run(baseDir, { argv: ['connect'] });
   expect(clientOnlyReason(response)).toEqual({ outcome: 'client-only', reason: 'command:connect' });
 });
 
 test('a run for another state dir is handed back to the client', async () => {
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
   const other = path.join(baseDir, 'other');
-  const response = await runNidusCliArgv(
-    request(baseDir, { argv: ['session', 'list', '--state-dir', other] }),
-  );
+  const response = await run(baseDir, { argv: ['session', 'list', '--state-dir', other] });
   expect(clientOnlyReason(response)).toEqual({ outcome: 'client-only', reason: 'other-state-dir' });
 });
 
 test('a terminal stderr and a different home stay with the client', async () => {
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
-  expect(clientOnlyReason(await runNidusCliArgv(request(baseDir, { stderrIsTTY: true })))).toEqual({
+  expect(clientOnlyReason(await run(baseDir, { stderrIsTTY: true }))).toEqual({
     outcome: 'client-only',
     reason: 'stderr-tty',
   });
   const env = { ...hostEnv(baseDir), HOME: path.join(baseDir, 'home') };
-  expect(clientOnlyReason(await runNidusCliArgv(request(baseDir, { env })))).toEqual({
+  expect(clientOnlyReason(await run(baseDir, { env }))).toEqual({
     outcome: 'client-only',
     reason: 'home',
   });
@@ -73,19 +79,18 @@ test('a terminal stderr and a different home stay with the client', async () => 
 
 test('debug output and relative steps files stay with the client', async () => {
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
+  expect(clientOnlyReason(await run(baseDir, { argv: ['snapshot', '--debug'] }))).toEqual({
+    outcome: 'client-only',
+    reason: 'debug',
+  });
   expect(
-    clientOnlyReason(await runNidusCliArgv(request(baseDir, { argv: ['snapshot', '--debug'] }))),
-  ).toEqual({ outcome: 'client-only', reason: 'debug' });
-  expect(
-    clientOnlyReason(
-      await runNidusCliArgv(request(baseDir, { argv: ['batch', '--steps-file', 'steps.json'] })),
-    ),
+    clientOnlyReason(await run(baseDir, { argv: ['batch', '--steps-file', 'steps.json'] })),
   ).toEqual({ outcome: 'client-only', reason: 'relative-steps-file' });
 });
 
 test('a malformed request is refused as invalid arguments', async () => {
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
-  const response = await runNidusCliArgv(request(baseDir, { cwd: 'relative' }));
+  const response = await run(baseDir, { cwd: 'relative' });
   expect(response.ok).toBe(false);
   expect(response.ok ? undefined : response.error.code).toBe('INVALID_ARGS');
 });
@@ -94,7 +99,7 @@ test('exactly the classified client-only commands are handed back by name', asyn
   const baseDir = mkdtempForTestSync('nidus-cli-argv-');
   const handedBack: string[] = [];
   for (const command of listCliCommandNames()) {
-    const data = clientOnlyReason(await runNidusCliArgv(request(baseDir, { argv: [command] })));
+    const data = clientOnlyReason(await run(baseDir, { argv: [command] }));
     if ((data as { reason?: string }).reason === `command:${command}`) handedBack.push(command);
   }
   // A new upstream command lands here until it is added to the native set or to this list.

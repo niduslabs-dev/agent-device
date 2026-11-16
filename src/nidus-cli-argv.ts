@@ -114,14 +114,17 @@ let ownRegistration: Promise<DaemonInfo | null> | undefined;
  * the run needs the client's own process. A client-only answer is given only before the run sent
  * anything to a daemon, so the client may run the Node CLI on the same argv.
  */
-export async function runNidusCliArgv(context: NidusCliArgvContext): Promise<DaemonResponse> {
+export async function runNidusCliArgv(
+  context: NidusCliArgvContext,
+  daemonHost: HostEnvironment,
+): Promise<DaemonResponse> {
   let input: NidusCliArgvInput;
   try {
     input = readInput(context.request.input);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-  const refusal = admissionRefusal(input, context.baseDir);
+  const refusal = admissionRefusal(input, context.baseDir, daemonHost);
   if (refusal) return answer({ kind: 'client-only', reason: refusal });
   const daemon = await readOwnRegistration(context.baseDir);
   if (!daemon) return answer({ kind: 'client-only', reason: 'daemon-registration' });
@@ -193,12 +196,16 @@ async function runEntryLikeBin(
  * rule names something the Node CLI reads from its own process or does there, which a run inside
  * the daemon would read or do differently.
  */
-function admissionRefusal(input: NidusCliArgvInput, baseDir: string): string | undefined {
+function admissionRefusal(
+  input: NidusCliArgvInput,
+  baseDir: string,
+  daemonHost: HostEnvironment,
+): string | undefined {
   // An interactive stderr turns on the upgrade notifier, which reads the process environment.
   if (input.stderrIsTTY) return 'stderr-tty';
-  // Diagnostics files and temporary artifacts resolve from the process home and temp dir.
-  if (input.env.HOME !== process.env.HOME) return 'home';
-  if (input.env.TMPDIR !== process.env.TMPDIR) return 'tmpdir';
+  // Diagnostics files and temporary artifacts resolve from the daemon process's home and temp dir.
+  if (input.env.HOME !== daemonHost.env.HOME) return 'home';
+  if (input.env.TMPDIR !== daemonHost.env.TMPDIR) return 'tmpdir';
   // A policy mismatch makes the Node CLI replace the daemon.
   if (input.env.AGENT_DEVICE_DAEMON_POLICY !== undefined) return 'daemon-policy';
 
