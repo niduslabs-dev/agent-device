@@ -20,13 +20,14 @@ export async function openDaemonServers(
   mode: DaemonServerMode,
   httpOptions: Parameters<typeof createDaemonHttpServer>[0],
   rollback: StartupRollback,
+  handleSocketRequest: typeof httpOptions.handleRequest = httpOptions.handleRequest,
 ): Promise<{ servers: DaemonServer[]; socketPort?: number; httpPort?: number }> {
   const servers: DaemonServer[] = [];
   rollback.onRollback(() => closeDaemonServers(servers));
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   if (mode !== 'http') {
-    const server = createSocketServer(httpOptions.handleRequest);
+    const server = createSocketServer(handleSocketRequest);
     servers.push(server);
     socketPort = await listenNetServer(server);
   }
