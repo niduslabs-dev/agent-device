@@ -373,6 +373,7 @@ test('setIosSetting appearance runs the simctl plan on the simulator udid and re
       assert.deepEqual(calls, [
         ['simctl', 'ui', 'sim-1', 'appearance'],
         ['simctl', 'ui', 'sim-1', 'appearance', 'light'],
+        ['simctl', 'ui', 'sim-1', 'appearance'],
       ]);
     },
   );

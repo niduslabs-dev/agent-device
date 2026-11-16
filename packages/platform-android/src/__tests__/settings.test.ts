@@ -11,15 +11,42 @@ import { withFakeAdb, type FakeAdbScript } from './test-utils/fake-adb.ts';
 // The fake adb provider installs through the production withAndroidAdbProvider
 // scope, so `calls` records device-scoped args without a leading `-s <serial>`.
 
-test('setAndroidSetting appearance toggle flips current mode', async () => {
+test('setAndroidSetting appearance toggle flips current mode and reports the mode read back', async () => {
+  let nightMode = 'yes';
   await withFakeAdb(
-    (args) => (args.join(' ') === 'shell cmd uimode night' ? 'Night mode: yes' : undefined),
+    (args) => {
+      const command = args.join(' ');
+      if (command === 'shell cmd uimode night') return `Night mode: ${nightMode}`;
+      if (command.startsWith('shell cmd uimode night ')) nightMode = args.at(-1) ?? nightMode;
+      return undefined;
+    },
     async ({ calls, device }) => {
-      await setAndroidSetting(device, 'appearance', 'toggle');
+      const result = await setAndroidSetting(device, 'appearance', 'toggle');
       assert.deepEqual(calls, [
         ['shell', 'cmd', 'uimode', 'night'],
         ['shell', 'cmd', 'uimode', 'night', 'no'],
+        ['shell', 'cmd', 'uimode', 'night'],
       ]);
+      assert.deepEqual(result, {
+        appearance: 'light',
+        verified: true,
+        message: 'Appearance is light',
+      });
+    },
+  );
+});
+
+test('setAndroidSetting appearance says requested when the read-back disagrees', async () => {
+  await withFakeAdb(
+    (args) => (args.join(' ') === 'shell cmd uimode night' ? 'Night mode: auto' : undefined),
+    async ({ device }) => {
+      const result = await setAndroidSetting(device, 'appearance', 'dark');
+      assert.deepEqual(result, {
+        appearance: 'dark',
+        verified: false,
+        observed: 'auto',
+        message: 'Appearance dark requested. The device reports auto.',
+      });
     },
   );
 });

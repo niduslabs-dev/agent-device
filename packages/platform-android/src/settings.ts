@@ -8,6 +8,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 import {
+  appearanceSettingPayload,
   parseAppearanceAction,
   parseSettingState,
   parseTextSizeCategory,
@@ -146,7 +147,7 @@ export async function setAndroidSetting(
     case 'appearance': {
       const target = await resolveAndroidAppearanceTarget(device, state);
       await runAndroidShell(device, ['cmd', 'uimode', 'night', target === 'dark' ? 'yes' : 'no']);
-      return;
+      return appearanceSettingPayload(target, await readAndroidAppearance(device));
     }
     case 'clear-app-state': {
       if (state.toLowerCase() !== 'clear') {
@@ -428,6 +429,13 @@ async function resolveAndroidAppearanceTarget(
   }
   if (current === 'auto') return 'dark';
   return current === 'dark' ? 'light' : 'dark';
+}
+
+/** The night mode the device reports after a write, or undefined when the read fails. */
+async function readAndroidAppearance(device: DeviceInfo): Promise<string | undefined> {
+  const result = await runAndroidShell(device, ['cmd', 'uimode', 'night'], { allowFailure: true });
+  if (result.exitCode !== 0) return undefined;
+  return parseAndroidAppearance(result.stdout, result.stderr) ?? undefined;
 }
 
 function parseAndroidAppearance(stdout: string, stderr: string): 'light' | 'dark' | 'auto' | null {
