@@ -57,7 +57,39 @@ extension RunnerTests {
     case performed
     case refused(ErrorPayload)
     case unconfirmed(ErrorPayload)
+    /// `hostTapLookup` found a still back button and tapped nothing: the host taps this point.
+    case awaitingHostTap(HostBackTapPayload)
   }
+
+  /// The part of an iOS `back` one `backInApp` request runs. The host takes the button tap only on a
+  /// local Simulator, where it can touch the digitizer below XCTest (ADR 0005).
+  enum InAppBackPhase {
+    /// Look up the button, tap it, and confirm the pop, or swipe when no button is pressed.
+    case complete
+    /// As `complete`, except that a still back button in a portrait window that fills the screen is
+    /// not tapped: its point is answered, and the state the pop is confirmed against is kept for
+    /// `hostTapConfirm`. Everything else, the swipe included, runs as in `complete`.
+    case hostTapLookup
+    /// Confirm the pop of the button the host tapped after `hostTapLookup`.
+    case hostTapConfirm
+
+    init(wire: BackInAppPhaseWire?) {
+      switch wire {
+      case nil: self = .complete
+      case .hostTapLookup: self = .hostTapLookup
+      case .hostTapConfirm: self = .hostTapConfirm
+      }
+    }
+  }
+
+#if os(iOS)
+  /// The state a host-tapped back button is confirmed against, kept from `hostTapLookup` until the
+  /// next `backInApp` request.
+  struct PendingHostBackTap {
+    let state: NavigationBarBackState
+    let windowHeight: CGFloat
+  }
+#endif
 
   /// The back swipe's duration, the `right-edge` preset's `GESTURE_FLING_DURATION_MS`.
   static let backSwipeDurationMs = 100.0
@@ -99,9 +131,9 @@ extension RunnerTests {
   /// iOS `back` presses the navigation bar's system back button when exactly one is on screen, read
   /// from the live tree in this call, and confirms that the bar changed. Otherwise it is the
   /// left-edge back swipe, verified by a change of the app's screen. No other button counts,
-  /// whatever its label.
+  /// whatever its label. `phase` splits the button tap off to the host; only iOS reads it.
   @MainActor
-  func performInAppBack(app: XCUIApplication) throws -> InAppBackOutcome {
+  func performInAppBack(app: XCUIApplication, phase: InAppBackPhase = .complete) throws -> InAppBackOutcome {
 #if os(macOS)
     guard let back = macOSNavigationBackElement(app: app) else {
       return .refused(Self.macOSInAppBackControlRefusal)
@@ -117,6 +149,11 @@ extension RunnerTests {
     _ = pressTvRemote(.menu)
     return .performed
 #elseif os(iOS)
+    if case .hostTapConfirm = phase {
+      return confirmHostBackTap(app: app)
+    }
+    // A lookup the host never followed with its tap and confirmation must not confirm a later one.
+    pendingHostBackTap = nil
     // The swipe logs one line on every exit, a refusal before it and a thrown error included. The
     // button path logs its own line on every exit, a thrown tap included.
     var trace = BackSwipeTrace()
@@ -133,7 +170,9 @@ extension RunnerTests {
       logSwipe(trace.logLine(outcome: outcome))
       return outcome
     }
-    if let pressed = try pressNavigationBarBackButton(app: app, context: context) {
+    let hostTaps: Bool
+    if case .hostTapLookup = phase { hostTaps = true } else { hostTaps = false }
+    if let pressed = try pressNavigationBarBackButton(app: app, context: context, hostTaps: hostTaps) {
       return pressed
     }
     do {
@@ -174,6 +213,7 @@ extension RunnerTests {
       case .performed: return logLine(name: "performed", code: nil)
       case .refused(let payload): return logLine(name: "refused", code: payload.code)
       case .unconfirmed(let payload): return logLine(name: "unconfirmed", code: payload.code)
+      case .awaitingHostTap: return logLine(name: "awaitingHostTap", code: nil)
       }
     }
 
@@ -193,6 +233,7 @@ extension RunnerTests {
     }
   }
 
+
   /// Presses the system back button when exactly one hittable one is on screen and the app shows a
   /// navigation bar, and confirms that the state changed. The button is read from the app's windows:
   /// a floating one, such as the iPhone Duo's, is not inside the bar. One with no label under bars
@@ -201,10 +242,13 @@ extension RunnerTests {
   /// Two candidates, such as a sheet over a stack, are ambiguous and fall back to the swipe too, as
   /// does a bar still moving after the read budget. Nil when nothing was sent, so the swipe is still
   /// safe; a delivered tap is never followed by a swipe. A hung XCTest query answers without either.
+  /// With `hostTaps`, a still button in a portrait window at the screen origin is not tapped here:
+  /// its point is answered and its state kept for `confirmHostBackTap`.
   @MainActor
   private func pressNavigationBarBackButton(
     app: XCUIApplication,
-    context: SynthesizedCoordinateContext
+    context: SynthesizedCoordinateContext,
+    hostTaps: Bool
   ) throws -> InAppBackOutcome? {
     var trace = NavigationBarBackTrace()
     // One line on every exit, a thrown tap included.
@@ -216,21 +260,16 @@ extension RunnerTests {
     }
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
-    var lookup = stillNavigationBarBackButton(
-      app: app,
-      geometry: context.geometry,
-      deadlineMs: started + Self.navigationBarBackReadBudgetMs
-    )
+    var lookup = lookUpNavigationBarBackButton(app: app, geometry: context.geometry, trace: &trace)
     // A push that a tap just started shows its back button in the tree only once the transition
     // ends, so a bar with no back button may be one that is still arriving. Wait out the app's
     // animations once, bounded, and look again before the swipe fallback.
-    if case .notFound("no") = lookup, waitForAppQuiescenceIfSupported(app) {
-      trace.quiescenceRetried = true
-      lookup = stillNavigationBarBackButton(
-        app: app,
-        geometry: context.geometry,
-        deadlineMs: currentUptimeMs() + Self.navigationBarBackReadBudgetMs
-      )
+    if case .notFound("no") = lookup {
+      let quiescence = waitForAppQuiescenceIfSupported(app)
+      trace.quiescence = quiescence.logToken
+      if quiescence != .unsupported {
+        lookup = lookUpNavigationBarBackButton(app: app, geometry: context.geometry, trace: &trace)
+      }
     }
     trace.lookupMs = currentUptimeMs() - started
     let before: NavigationBarBackState
@@ -247,6 +286,12 @@ extension RunnerTests {
       return .refused(Self.navigationBarBackHungLookup)
     }
     trace.found = "yes"
+    let windowHeight = context.geometry.windowOnScreen.rect.height
+    if hostTaps, let tap = Self.hostBackTap(at: frame, geometry: context.geometry) {
+      pendingHostBackTap = PendingHostBackTap(state: before, windowHeight: windowHeight)
+      trace.hostTap = true
+      return .awaitingHostTap(tap)
+    }
     // The synthesized tap returns once the touch is delivered; an XCTest tap would also wait out the
     // pop animation, which the bar check below reads sooner. On iOS a readable tree's XCTest tap
     // either runs or throws, so its fallback needs no outcome check.
@@ -259,35 +304,106 @@ extension RunnerTests {
       return nil
     }
     trace.pressed = true
+    return confirmNavigationBarBackPop(app: app, from: before, windowHeight: windowHeight, trace: &trace)
+  }
+
+  /// Confirms the pop of the button the host tapped after a `hostTapLookup` request. Without a kept
+  /// lookup nothing is read: the host sent a tap this runner cannot judge, so the outcome is unknown.
+  @MainActor
+  private func confirmHostBackTap(app: XCUIApplication) -> InAppBackOutcome {
+    var trace = NavigationBarBackTrace()
+    trace.hostTap = true
+    trace.pressed = true
+    defer {
+      NSLog("AGENT_DEVICE_RUNNER_BACK_NAVIGATION_BAR_BUTTON %@", trace.logLine)
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+      lastNavigationBarBackTraceForTesting = trace
+#endif
+    }
+    guard let pending = pendingHostBackTap else {
+      trace.found = "no-lookup"
+      return .unconfirmed(Self.navigationBarBackHostTapWithoutLookup)
+    }
+    pendingHostBackTap = nil
+    trace.found = "yes"
+    return confirmNavigationBarBackPop(app: app, from: pending.state, windowHeight: pending.windowHeight, trace: &trace)
+  }
+
+  /// Reads the bar until it shows the pop, then waits, bounded, for the pop animation to end, so
+  /// back answers on a screen that takes touches again.
+  @MainActor
+  private func confirmNavigationBarBackPop(
+    app: XCUIApplication,
+    from before: NavigationBarBackState,
+    windowHeight: CGFloat,
+    trace: inout NavigationBarBackTrace
+  ) -> InAppBackOutcome {
     let tapped = currentUptimeMs()
     let confirmation = navigationBarBackConfirmation(
       app: app,
       from: before,
-      windowHeight: context.geometry.windowOnScreen.rect.height,
+      windowHeight: windowHeight,
       deadlineMs: tapped + Self.navigationBarBackReadBudgetMs
     )
     trace.confirmMs = currentUptimeMs() - tapped
     trace.confirmed = confirmation.logToken
     switch confirmation {
-    case .changed: return .performed
+    case .changed:
+      // The tree shows the pop while UIKit still animates it, and UIKit drops a touch that lands
+      // in the transition: a direct-touch press right after `back` would vanish. The pop has begun,
+      // so the app reports idle only once it ends.
+      let settleStarted = currentUptimeMs()
+      trace.popSettle = waitForAppQuiescenceIfSupported(app).logToken
+      trace.popSettleMs = currentUptimeMs() - settleStarted
+      return .performed
     case .unchanged: return .unconfirmed(Self.navigationBarBackUnverified)
     case .hung: return .unconfirmed(Self.navigationBarBackHungConfirmation)
     }
   }
 
+  /// The point the host taps for a back button, in the screen points of a portrait window at the
+  /// screen origin, which are the digitizer's own. Nil in any other window, which keeps the runner
+  /// tap: the host's digitizer route has no rotation or window placement of its own.
+  static func hostBackTap(at button: CGRect, geometry: SurfaceGeometry) -> HostBackTapPayload? {
+    let window = geometry.windowOnScreen.rect
+    guard geometry.orientation == RunnerInterfaceOrientation.portrait, window.origin == .zero,
+      SnapshotGeometry.isPositiveFinite(window), window.contains(CGPoint(x: button.midX, y: button.midY))
+    else { return nil }
+    return HostBackTapPayload(
+      x: Double(button.midX),
+      y: Double(button.midY),
+      viewportWidth: Double(window.width),
+      viewportHeight: Double(window.height)
+    )
+  }
+
+  static let navigationBarBackHostTapWithoutLookup = ErrorPayload(
+    code: RunnerWireErrorCode.backSwipeUnverified,
+    message: "back was asked to confirm a back button tap the runner did not look up. This is an unknown outcome.",
+    hint: "Take a snapshot to see where the app is."
+  )
+
   /// What the back button path saw, logged as one line on every exit.
   struct NavigationBarBackTrace {
     /// `skipped` when the tree was not read, `unreadable` when a read failed, `hung` when an XCTest
     /// query hung, `moving` when the bar did not hold still within the read budget, `no`,
-    /// `ambiguous`, `unprovable` (a back button with no label under bars with no title), or `yes`.
+    /// `ambiguous`, `unprovable` (a back button with no label under bars with no title), `yes`, or
+    /// `no-lookup` (a host tap confirmation without a kept lookup).
     var found = "skipped"
     var pressed = false
     /// `yes`, `no`, or `hung`; nil until a tap was delivered.
     var confirmed: String?
     var lookupMs = 0.0
     var confirmMs: Double?
-    /// Whether the lookup found no button, waited for the app to go idle, and looked again.
-    var quiescenceRetried = false
+    /// How the wait for idle animations after a lookup that found no button ended; nil without one.
+    var quiescence: String?
+    /// Whether two agreeing reads answered the lookup, instead of the still check.
+    var agreedReads = false
+    /// Whether the host takes, or took, the tap.
+    var hostTap = false
+    /// How the wait for the pop animation to end did, and how long it took; nil until a pop.
+    var popSettle: String?
+    var popSettleMs: Double?
 
     var logLine: String {
       func ms(_ value: Double?) -> String { value.map { String(Int($0.rounded())) } ?? "-" }
@@ -297,8 +413,69 @@ extension RunnerTests {
         "confirmed=\(confirmed ?? "-")",
         "lookupMs=\(ms(lookupMs))",
         "confirmMs=\(ms(confirmMs))",
-        "quiescenceRetried=\(quiescenceRetried ? "yes" : "no")",
+        "quiescence=\(quiescence ?? "-")",
+        "agreedReads=\(agreedReads ? "yes" : "no")",
+        "hostTap=\(hostTap ? "yes" : "no")",
+        "popSettle=\(popSettle ?? "-")",
+        "popSettleMs=\(ms(popSettleMs))",
       ].joined(separator: " ")
+    }
+  }
+
+  /// The back button lookup: two reads that agree, else the still check.
+  @MainActor
+  private func lookUpNavigationBarBackButton(
+    app: XCUIApplication,
+    geometry: SurfaceGeometry,
+    trace: inout NavigationBarBackTrace
+  ) -> NavigationBarBackLookup {
+    if let agreed = agreeingNavigationBarBackButton(
+      app: app,
+      geometry: geometry,
+      deadlineMs: currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+    ) {
+      trace.agreedReads = true
+      return agreed
+    }
+    return stillNavigationBarBackButton(
+      app: app,
+      geometry: geometry,
+      deadlineMs: currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+    )
+  }
+
+  /// One read of the buttons and bars, then the live read, which reads the bars again and compares
+  /// the live frame of the one hittable button with the first read. Two reads that agree are as
+  /// still as the still check's rounds show for a labeled button, whose state is its labels, frames
+  /// and the bar count. A still state, no button, or a hung query answer the lookup. Nil hands it to
+  /// the still check: a read that failed, a state that changed between the two reads, or an
+  /// unlabeled button, whose pop shows only through a bar title that may change on its own.
+  @MainActor
+  private func agreeingNavigationBarBackButton(
+    app: XCUIApplication,
+    geometry: SurfaceGeometry,
+    deadlineMs: Double
+  ) -> NavigationBarBackLookup? {
+    let windowHeight = geometry.windowOnScreen.rect.height
+    let sample: NavigationBarBackSample
+    switch readNavigationBarBack(
+      app: app, phase: .lookup, deadlineMs: deadlineMs, windowHeight: windowHeight, knownBars: nil
+    ) {
+    case .hung: return .hung
+    case .unreadable: return nil
+    case .read(let read): sample = read
+    }
+    let candidates = sample.candidates(by: sample.bars)
+    if candidates.isEmpty { return .notFound("no") }
+    let state = sample.state(of: candidates, bars: sample.bars)
+    if state.hasUnlabeledBackButton { return nil }
+    let liveDeadlineMs = currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+    switch liveNavigationBarBackButton(of: sample, geometry: geometry, deadlineMs: liveDeadlineMs) {
+    case .hung: return .hung
+    case .unreadable: return nil
+    case .read(.absent(let found)): return .notFound(found)
+    case .read(.found(let live, let button, _)): return live == state ? .still(live, button: button) : nil
+    case .read(.moving): return nil
     }
   }
 

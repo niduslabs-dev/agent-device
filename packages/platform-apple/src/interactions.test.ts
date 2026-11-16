@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { iosRunnerOverrides, performGestureApple } from './interactions.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { dragThroughSimulatorHid } from './simulator-hid/client.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { gestureRefusalMessage } from '@agent-device/contracts/gesture-admission';
 import { APPLE_MULTI_TOUCH_UNSUPPORTED_HINTS } from './multitouch-support.ts';
@@ -23,10 +24,16 @@ vi.mock('./core/runner-client.ts', async (importOriginal) => {
   return { ...actual, runAppleRunnerCommand: vi.fn(actual.runAppleRunnerCommand) };
 });
 
+vi.mock('./simulator-hid/client.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./simulator-hid/client.ts')>()),
+  dragThroughSimulatorHid: vi.fn(),
+}));
+
 const runnerActual =
   await vi.importActual<typeof import('./core/runner-client.ts')>('./core/runner-client.ts');
 
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
+const mockDragThroughSimulatorHid = vi.mocked(dragThroughSimulatorHid);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -499,6 +506,7 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     durationMs: 50,
     scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
+    scrollDispatch: 'host',
   });
   assert.deepEqual(result, {
     x1: 200,
@@ -537,9 +545,10 @@ test('iosRunnerOverrides keeps explicit iOS scroll distance with the controlled 
     command: 'scroll',
     direction: 'down',
     pixels: 400,
-    durationMs: 400,
+    durationMs: 300,
     scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
+    scrollDispatch: 'host',
   });
 });
 
@@ -567,9 +576,10 @@ test('iosRunnerOverrides materializes the controlled iOS default scroll amount',
     command: 'scroll',
     direction: 'down',
     amount: 0.65,
-    durationMs: 400,
+    durationMs: 300,
     scrollReleaseBehavior: 'controlled',
     appBundleId: 'com.example.App',
+    scrollDispatch: 'host',
   });
   assert.deepEqual(result, {
     x1: 200,
@@ -580,8 +590,95 @@ test('iosRunnerOverrides materializes the controlled iOS default scroll amount',
     referenceHeight: 800,
     amount: 0.65,
     pixels: 520,
-    durationMs: 400,
+    durationMs: 300,
   });
+});
+
+test('iosRunnerOverrides keeps a physical iPhone scroll on the runner drag at the XCTest duration', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
+    x: 200,
+    y: 540,
+    x2: 200,
+    y2: 260,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_DEVICE,
+    { appBundleId: 'com.example.App' },
+    process.env,
+  );
+
+  await overrides.scroll('down');
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'scroll',
+    direction: 'down',
+    amount: 0.65,
+    durationMs: 400,
+    scrollReleaseBehavior: 'controlled',
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides drags a planned simulator scroll through the digitizer, not the runner', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
+    message: 'scrollAwaitingHostDrag',
+    x: 201,
+    y: 700,
+    x2: 201,
+    y2: 248,
+    referenceWidth: 402,
+    referenceHeight: 696,
+    hostScrollDrag: { x: 201, y: 700, x2: 201, y2: 248, viewportWidth: 402, viewportHeight: 874 },
+  });
+  mockDragThroughSimulatorHid.mockResolvedValueOnce(true);
+
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    { appBundleId: 'com.example.App' },
+    process.env,
+  );
+
+  const result = await overrides.scroll('down');
+
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+  const [, target] = mockDragThroughSimulatorHid.mock.calls[0]!;
+  assert.deepEqual(target.path[0], { x: 201, y: 700, offsetMs: 0 });
+  assert.deepEqual(target.path.at(-1), { x: 201, y: 248, offsetMs: 348 });
+  assert.deepEqual(target.viewport, { width: 402, height: 874 });
+  assert.ok(result);
+  assert.equal('hostScrollDrag' in result, false);
+  assert.equal(result.durationMs, 300);
+});
+
+test('iosRunnerOverrides lets the runner drag when the digitizer sent nothing', async () => {
+  mockRunAppleRunnerCommand
+    .mockResolvedValueOnce({
+      hostScrollDrag: { x: 201, y: 700, x2: 201, y2: 248, viewportWidth: 402, viewportHeight: 874 },
+    })
+    .mockResolvedValueOnce({
+      x: 201,
+      y: 700,
+      x2: 201,
+      y2: 248,
+      referenceWidth: 402,
+      referenceHeight: 696,
+    });
+  mockDragThroughSimulatorHid.mockResolvedValueOnce(false);
+
+  const { overrides } = iosRunnerOverrides(
+    IOS_TEST_SIMULATOR,
+    { appBundleId: 'com.example.App' },
+    process.env,
+  );
+
+  await overrides.scroll('down');
+
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 2);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[0]?.[1].scrollDispatch, 'host');
+  assert.equal(mockRunAppleRunnerCommand.mock.calls[1]?.[1].scrollDispatch, undefined);
 });
 
 test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration', async () => {

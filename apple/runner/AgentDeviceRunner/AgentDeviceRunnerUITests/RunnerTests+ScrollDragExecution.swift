@@ -253,4 +253,42 @@ extension RunnerTests {
   private func dragCommandName(message: String) -> String {
     return message == "scrolled" ? "scroll" : "drag"
   }
+
+#if os(iOS)
+  /// The drag a `scroll` with `scrollDispatch: host` hands to the host instead of sending it: the
+  /// same keyboard-avoiding points the runner drag would take, in the screen points of a portrait
+  /// window at the screen origin, which are the digitizer's own. Nil in any other window, or when no
+  /// plan resolves, which keeps the runner drag.
+  @MainActor
+  func hostScrollDragResponse(
+    activeApp: XCUIApplication,
+    from start: CGPoint,
+    to end: CGPoint,
+    context: SynthesizedCoordinateContext
+  ) throws -> Response? {
+    let window = context.geometry.windowOnScreen.rect
+    guard context.geometry.orientation == RunnerInterfaceOrientation.portrait, window.origin == .zero,
+      SnapshotGeometry.isPositiveFinite(window),
+      let plan = try axFreeSynthesizedDragPlan(
+        app: activeApp, x: Double(start.x), y: Double(start.y), x2: Double(end.x), y2: Double(end.y), context: context)
+    else { return nil }
+    let points = plan.points
+    guard window.contains(CGPoint(x: points.x, y: points.y)), window.contains(CGPoint(x: points.x2, y: points.y2))
+    else { return nil }
+    var data = DataPayload(message: "scrollAwaitingHostDrag")
+    data.x = points.x
+    data.y = points.y
+    data.x2 = points.x2
+    data.y2 = points.y2
+    data.hostScrollDrag = HostScrollDragPayload(
+      x: points.x,
+      y: points.y,
+      x2: points.x2,
+      y2: points.y2,
+      viewportWidth: Double(window.width),
+      viewportHeight: Double(window.height)
+    )
+    return Response(ok: true, data: data)
+  }
+#endif
 }

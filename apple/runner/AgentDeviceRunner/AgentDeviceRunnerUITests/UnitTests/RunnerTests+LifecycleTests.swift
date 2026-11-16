@@ -12,6 +12,14 @@ private struct AlertCommandTraitsFixture: Decodable {
 }
 
 extension RunnerTests {
+  /// XCTest's idle wait reports nothing, so a wait that lasted its bound is the one that ran out.
+  func testAppQuiescenceWaitReadsAWaitThatLastedTheBoundAsTimedOut() {
+    XCTAssertEqual(Self.appQuiescenceWait(durationMs: 2, boundMs: 1000), .idle)
+    XCTAssertEqual(Self.appQuiescenceWait(durationMs: 940, boundMs: 1000), .idle)
+    XCTAssertEqual(Self.appQuiescenceWait(durationMs: 960, boundMs: 1000), .timedOut)
+    XCTAssertEqual(Self.appQuiescenceWait(durationMs: 1004, boundMs: 1000), .timedOut)
+  }
+
 #if os(iOS)
   /// A frame sample resolves the lit panel without booking it, so it never replaces the request's booking.
   @MainActor

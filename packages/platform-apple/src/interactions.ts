@@ -31,7 +31,17 @@ import {
 import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';
-import { admitsSimulatorHidTap, tapThroughSimulatorHid } from './simulator-hid/client.ts';
+import {
+  admitsSimulatorHidDevice,
+  admitsSimulatorHidTap,
+  dragThroughSimulatorHid,
+  tapThroughSimulatorHid,
+} from './simulator-hid/client.ts';
+import {
+  controlledScrollDragPath,
+  IOS_HOST_SCROLL_DURATION_MS,
+  readHostScrollDrag,
+} from './simulator-hid/scroll.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
@@ -468,7 +478,21 @@ async function runAppleScroll(
     );
   }
 
-  const iosOptions = materializeIosScrollOptions(options);
+  // On a local Simulator a controlled scroll's drag goes to the digitizer, not XCTest: the runner
+  // plans it and answers it in `hostScrollDrag`, and the host sends it, shorter (ADR 0040).
+  const hostDrags =
+    admitsSimulatorHidDevice(device) && (options?.releaseBehavior ?? 'controlled') === 'controlled';
+  const iosOptions = materializeIosScrollOptions(
+    hostDrags && options?.durationMs === undefined
+      ? { ...options, durationMs: IOS_HOST_SCROLL_DURATION_MS }
+      : options,
+  );
+  const scrollCommand = {
+    command: 'scroll',
+    direction,
+    ...scrollRunnerFields(iosOptions),
+    appBundleId: ctx.appBundleId,
+  } as const;
 
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
   // The runner is also the only party holding the live keyboard frame, so a surface it refuses to
@@ -477,14 +501,25 @@ async function runAppleScroll(
   try {
     runnerResult = await runRunnerCommand(
       device,
-      {
-        command: 'scroll',
-        direction,
-        ...scrollRunnerFields(iosOptions),
-        appBundleId: ctx.appBundleId,
-      },
+      hostDrags ? { ...scrollCommand, scrollDispatch: 'host' } : scrollCommand,
       runnerOpts,
     );
+    const drag = readHostScrollDrag(runnerResult);
+    if (drag) {
+      const { hostScrollDrag: _planned, ...planned } = runnerResult;
+      const path = controlledScrollDragPath(
+        drag,
+        iosOptions.durationMs ?? IOS_HOST_SCROLL_DURATION_MS,
+      );
+      runnerResult = (await dragThroughSimulatorHid(
+        device,
+        { path, viewport: drag.viewport },
+        runnerOpts.signal,
+      ))
+        ? planned
+        : // The digitizer sent nothing, so the runner plans and drags again itself.
+          await runRunnerCommand(device, scrollCommand, runnerOpts);
+    }
   } catch (error) {
     throw withAppleScrollKeyboardOcclusion(error);
   }

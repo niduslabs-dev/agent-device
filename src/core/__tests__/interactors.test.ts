@@ -135,9 +135,11 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
       command: 'scroll',
       direction: 'down',
       pixels: 120,
-      durationMs: 400,
+      durationMs: 300,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
+      // A local simulator's controlled scroll asks for the plan; this runner dragged itself.
+      scrollDispatch: 'host',
     },
   ]);
   assert.deepEqual(result, {
@@ -148,7 +150,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
     referenceWidth: 300,
     referenceHeight: 600,
     pixels: 120,
-    durationMs: 400,
+    durationMs: 300,
   });
 });
 
@@ -180,9 +182,10 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
       command: 'scroll',
       direction: 'down',
       amount: 0.5,
-      durationMs: 400,
+      durationMs: 300,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
+      scrollDispatch: 'host',
     },
   ]);
   // amount 0.5 against a 600px vertical axis -> 300 planned pixels.
@@ -267,7 +270,9 @@ test('iOS back keeps the in-app navigation path, not the tvOS remote', async () 
   await withRunner(() => interactor.back());
 
   // The per-OS gate must not flatten: touch-input iOS never uses the XCUIRemote path.
-  assert.deepEqual(commands, [{ command: 'backInApp', appBundleId: 'com.example.app' }]);
+  assert.deepEqual(commands, [
+    { command: 'backInApp', appBundleId: 'com.example.app', backInAppPhase: 'hostTapLookup' },
+  ]);
 });
 
 test('ios scroll rejects non-positive amount before sending any runner command', async () => {

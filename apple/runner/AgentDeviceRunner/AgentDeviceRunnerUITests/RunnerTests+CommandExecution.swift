@@ -339,13 +339,22 @@ extension RunnerTests {
         guard scrollDurationIsValid(command.durationMs) else {
           return invalidScrollDurationResponse(commandName: "scroll")
         }
+        let start = CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: gesture.planFrame.minY + gesture.plan.y1)
+        let end = CGPoint(x: gesture.planFrame.minX + gesture.plan.x2, y: gesture.planFrame.minY + gesture.plan.y2)
+#if os(iOS)
+        if command.scrollDispatch == .host, command.scrollReleaseBehavior != .inertial,
+          let planned = try hostScrollDragResponse(activeApp: activeApp, from: start, to: end, context: scrollContext)
+        {
+          return gesture.attachingEvidence(to: planned)
+        }
+#endif
         return gesture.attachingEvidence(
           to: try executeScrollDragGesture(
             activeApp: activeApp,
-            x: gesture.planFrame.minX + gesture.plan.x1,
-            y: gesture.planFrame.minY + gesture.plan.y1,
-            x2: gesture.planFrame.minX + gesture.plan.x2,
-            y2: gesture.planFrame.minY + gesture.plan.y2,
+            x: Double(start.x),
+            y: Double(start.y),
+            x2: Double(end.x),
+            y2: Double(end.y),
             durationMs: defaults.durationMs,
             message: "scrolled",
             context: scrollContext,
@@ -555,9 +564,13 @@ extension RunnerTests {
       )
 #endif
     case .backInApp:
-      switch try performInAppBack(app: activeApp) {
+      switch try performInAppBack(app: activeApp, phase: InAppBackPhase(wire: command.backInAppPhase)) {
       case .performed:
         return Response(ok: true, data: DataPayload(message: "backInApp"))
+      case .awaitingHostTap(let tap):
+        var data = DataPayload(message: "backInAppAwaitingHostTap")
+        data.hostBackTap = tap
+        return Response(ok: true, data: data)
       case .refused(let error), .unconfirmed(let error):
         return Response(ok: false, error: error)
       }

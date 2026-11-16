@@ -134,6 +134,21 @@ than silently applied:
 { "command": "backInApp", "appBundleId": "com.example.app" }
 ```
 
+On a local iOS Simulator the daemon sends `"backInAppPhase": "hostTapLookup"`. The runner then
+looks the button up as described below, but does not tap a still button in a portrait window at the
+screen origin. It answers `hostBackTap` (`x`, `y`, `viewportWidth`, `viewportHeight`, in screen
+points) and keeps the state it read. The daemon taps that point through the Simulator's digitizer
+and sends `"backInAppPhase": "hostTapConfirm"`, which runs the confirmation below against the kept
+state. A confirmation without a kept lookup answers `BACK_SWIPE_UNVERIFIED` and reads nothing. Any
+other `backInApp` clears the kept state. Every other lookup outcome, the swipe included, runs to the
+end in the `hostTapLookup` request. On either tap route, once the bar shows the pop, the runner waits
+for the app to go idle (bounded at 1 s) before it answers `ok`, so the next touch does not land in
+the pop animation, which UIKit drops.
+
+`scroll` takes `"scrollDispatch": "host"` the same way: for a controlled scroll in a portrait window
+at the screen origin, the runner plans the drag as usual and answers it in `hostScrollDrag` (`x`, `y`,
+`x2`, `y2`, `viewportWidth`, `viewportHeight`) with the scroll evidence, and drags nothing.
+
 `backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
 call, for the system back button: a button with the identifier `BackButton` in the app's windows
 (the lit panel's windows when a panel is booked). A floating one, such as the iPhone Duo's, is a
@@ -145,7 +160,8 @@ synthesized tap only when all of these hold:
   horizontally within a bar and below it, within a third of the window height from the bar's top.
 - Two reads in a row of the `BackButton` buttons by a navigation bar (the candidates), with a 0.05 s
   pause between them, agree on their labels and frames, hittable or not. A `BackButton` that is not
-  by a bar is neither counted nor compared.
+  by a bar is neither counted nor compared. When every candidate has a label, the first read and the
+  live read below are tried alone first: if they agree, the state is still without the second round.
 - One live read of those buttons then finds exactly one hittable. Its frame is in the state. The match
   places the snapshot frames at the window's screen origin, because a placed iPad window reports them
   from its own top-left.

@@ -201,6 +201,11 @@ final class RunnerTests: XCTestCase {
   var privateAXAcceptedDepthProcessIdentifier: Int?
   var privateAXAcceptedDepth: Int?
   var privateAXAcceptedDepthUntil = Date.distantPast
+#if os(iOS)
+  /// The back button lookup a host tap is confirmed against (`backInApp` `hostTapLookup`). Every
+  /// other `backInApp` request clears it.
+  var pendingHostBackTap: PendingHostBackTap?
+#endif
   // Bluesky-class screens can grind ~4-8s before an XCTest-backed snapshot tier fails; anything
   // past this threshold marks the screen hostile so the next capture uses non-XCTest recovery.
   let snapshotXCTestSlowCaptureThreshold: TimeInterval = 3
