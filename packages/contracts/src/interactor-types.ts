@@ -97,6 +97,12 @@ export type CoordinateTapTextInputEvidence = Readonly<{
   targetBundleId: string;
   point: Point;
   textInputRects: readonly Rect[];
+  /**
+   * The box the measuring capture's rects are in (the app window in the app's orientation). A
+   * simulator touch sent below XCTest needs it to prove the app's points are the screen's portrait
+   * points. The runner ignores it.
+   */
+  viewport?: Readonly<{ width: number; height: number }>;
 }>;
 
 export type PressPointOptions = Readonly<{
