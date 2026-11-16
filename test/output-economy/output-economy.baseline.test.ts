@@ -104,8 +104,8 @@ describe('actionability and reliability floors', () => {
   test('snapshot digest preserves actionable refs and their generation', () => {
     expect(rendered.snapshotDigest.refsGeneration).toEqual(expect.any(Number));
     expect(rendered.snapshotDigest.refs).toEqual([
-      { ref: 'e2', label: 'Email' },
-      { ref: 'e3', label: 'Place order' },
+      { ref: 'e2', label: 'Email', rect: { x: 20, y: 120, width: 350, height: 44 } },
+      { ref: 'e3', label: 'Place order', rect: { x: 20, y: 720, width: 350, height: 48 } },
     ]);
     expect(rendered.snapshotDigest).toMatchObject({
       nodeCount: 6,

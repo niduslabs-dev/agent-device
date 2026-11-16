@@ -1,4 +1,5 @@
 import { isDeviceRotation } from '@agent-device/contracts/device';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type { DaemonResponseData, ResponseLevel } from '@agent-device/kernel/contracts';
 import type { ScreenshotOverlayRef, SnapshotNode } from '@agent-device/kernel/snapshot';
 
@@ -15,7 +16,7 @@ const DIGEST_REF_LIMIT = 12;
 
 /**
  * Token-cheap snapshot digest: the node count plus the first N actionable refs
- * (hittable and not occluded) with a label, and the cheap top-level signals
+ * (hittable and not occluded) with a label and, when it has area, the ref's rect, and the cheap top-level signals
  * (`truncated`, `visibility`, `snapshotQuality`) plus any fallback screenshot
  * retrieval handle. The full node tree — the
  * dominant token sink — is dropped. `full` returns today's shape unchanged
@@ -27,7 +28,11 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
   const refs = nodes
     .filter((node) => node.hittable === true && node.interactionBlocked !== 'covered')
     .slice(0, DIGEST_REF_LIMIT)
-    .map((node) => ({ ref: node.ref, label: node.label ?? node.value ?? node.identifier }));
+    .map((node) => ({
+      ref: node.ref,
+      label: node.label ?? node.value ?? node.identifier,
+      ...(isPositiveFiniteRect(node.rect) ? { rect: node.rect } : {}),
+    }));
   // Everything here is negotiable except the tree's own size and refs, so the optional signals are
   // carried by name rather than by one spread per field (#1076 refs generation, #2682 target
   // activation, and the occlusion/quality/visibility warnings a digest still has to surface).

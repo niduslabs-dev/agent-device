@@ -245,8 +245,8 @@ test('formatSnapshotText hides off-screen refs and adds compact discovery summar
   );
 
   assert.match(text, /Snapshot: 2 visible nodes \(4 total\)/);
-  assert.match(text, /^@e1 \[window\]$/m);
-  assert.match(text, /^ {2}@e2 \[button\] "Settings"$/m);
+  assert.match(text, /^@e1 \[window\] \([-\d.,]+\)$/m);
+  assert.match(text, /^ {2}@e2 \[button\] "Settings" \([-\d.,]+\)$/m);
   assert.doesNotMatch(text, /@e3 \[button\] "Privacy"/);
   assert.doesNotMatch(text, /@e4 \[button\] "Battery"/);
   assert.match(text, /\[off-screen below\] 2 interactive items: "Privacy", "Battery"/);
@@ -374,7 +374,7 @@ test('formatSnapshotText renders explicit hidden scroll-area content hints', () 
   );
 
   assert.match(text, /Snapshot: 3 visible nodes/);
-  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\] \([-\d.,]+\)$/m);
   assert.match(text, /^ {4}\[content above scroll-area hidden\]$/m);
   assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
   assert.ok(
@@ -424,8 +424,8 @@ test('formatSnapshotText keeps below scroll hints at the bottom when depth is fl
     }),
   );
 
-  assert.match(text, /^ {2}@e2 \[scroll-area\] "Catalog" \[scrollable\]$/m);
-  assert.match(text, /^ {2}@e3 \[button\] "Visible product"$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Catalog" \[scrollable\] \([-\d.,]+\)$/m);
+  assert.match(text, /^ {2}@e3 \[button\] "Visible product" \([-\d.,]+\)$/m);
   assert.ok(
     text.indexOf('[content above scroll-area hidden]') < text.indexOf('@e3 [button]'),
     'above hint should stay at the top of the scroll-area',
@@ -501,7 +501,7 @@ test('formatSnapshotText renders hidden scroll-area content hints in flattened o
     ),
   );
 
-  assert.match(text, /^@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
+  assert.match(text, /^@e2 \[scroll-area\] "Messages" \[scrollable\] \([-\d.,]+\)$/m);
   assert.match(text, /^ {2}\[content above scroll-area hidden\]$/m);
   assert.match(text, /^ {2}\[content below scroll-area hidden\]$/m);
 });
@@ -524,7 +524,7 @@ test('formatSnapshotText normalizes RecyclerView containers to list', () => {
     }),
   );
 
-  assert.match(text, /^@e1 \[list\]$/m);
+  assert.match(text, /^@e1 \[list\] \([-\d.,]+\)$/m);
   assert.match(text, /^ {2}\[content below list hidden\]$/m);
 });
 
@@ -571,9 +571,9 @@ test('formatSnapshotText renders hidden-below list hints after visible descendan
     }),
   );
 
-  assert.match(text, /^@e2 \[list\]$/m);
-  assert.match(text, /^ {2}@e3 \[text\] "Text view"$/m);
-  assert.match(text, /^ {4}@e4 \[text\] "loadJSBundleFromAssets"$/m);
+  assert.match(text, /^@e2 \[list\] \([-\d.,]+\)$/m);
+  assert.match(text, /^ {2}@e3 \[text\] "Text view" \([-\d.,]+\)$/m);
+  assert.match(text, /^ {4}@e4 \[text\] "loadJSBundleFromAssets" \([-\d.,]+\)$/m);
   assert.match(text, /^ {2}\[content below list hidden\]$/m);
   assert.ok(
     text.indexOf('@e4 [text] "loadJSBundleFromAssets"') <
@@ -636,10 +636,10 @@ test('formatSnapshotText marks visible scroll areas with hidden content above an
     }),
   );
 
-  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\]$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] "Messages" \[scrollable\] \([-\d.,]+\)$/m);
   assert.match(text, /^ {4}\[content above scroll-area hidden\]$/m);
   assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
-  assert.match(text, /^ {4}@e4 \[button\] "Visible message"$/m);
+  assert.match(text, /^ {4}@e4 \[button\] "Visible message" \([-\d.,]+\)$/m);
   assert.doesNotMatch(text, /\[off-screen above\].*"Earlier message"/);
   assert.doesNotMatch(text, /\[off-screen below\].*"Later message"/);
 });
@@ -670,7 +670,7 @@ test('formatSnapshotText suppresses noisy system scroll-container labels', () =>
     }),
   );
 
-  assert.match(text, /^ {2}@e2 \[scroll-area\] \[scrollable\]$/m);
+  assert.match(text, /^ {2}@e2 \[scroll-area\] \[scrollable\] \([-\d.,]+\)$/m);
   assert.match(text, /^ {4}\[content below scroll-area hidden\]$/m);
   assert.doesNotMatch(text, /Vertical scroll bar, 2 pages/);
 });

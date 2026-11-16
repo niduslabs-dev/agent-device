@@ -50,15 +50,15 @@ settled after 480ms: +2 -0 (~11 unchanged)
 export const OFFSCREEN_TARGET_SNAPSHOT_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 8 visible nodes (12 total)
-@e1 [application] "Preferences"
-@e2 [window]
-@e3 [collection]
+@e1 [application] "Preferences" (0,0,390,800)
+@e2 [window] (0,0,390,800)
+@e3 [collection] (0,60,390,740)
   [content below collection hidden]
-@e4 [cell] "General"
-@e5 [cell] "Display"
-@e6 [cell] "Sounds"
-@e7 [cell] "Focus"
-@e8 [cell] "Screen Time"`,
+@e4 [cell] "General" (0,60,390,120)
+@e5 [cell] "Display" (0,190,390,120)
+@e6 [cell] "Sounds" (0,320,390,120)
+@e7 [cell] "Focus" (0,450,390,120)
+@e8 [cell] "Screen Time" (0,580,390,120)`,
 };
 
 // Never-settled press: success response, no diff, NEVER_SETTLED_HINT attached.
@@ -77,8 +77,8 @@ export const PRIVATE_AX_RECOVERY_SAMPLE = {
   command: 'agent-device snapshot -i',
   output: `Snapshot: 2 nodes
 Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.
-@e5 [button] "Search"
-@e8 [tab] "Home" [selected]`,
+@e5 [button] "Search" (20,120,200,44)
+@e8 [tab] "Home" [selected] (0,780,100,60)`,
 };
 
 // DEVICE_IN_USE from buildDeviceInUseBySessionError
@@ -168,8 +168,8 @@ Warning: The session is open, but the initial interactive snapshot failed (COMMA
 export const MERGED_CARD_ACTIONS_SAMPLE = {
   command: 'agent-device snapshot -i --actions',
   output: `Snapshot: 4 nodes
-@e1 [application] "Bluesky"
-@e2 [window]
-@e3 [collection]
-@e72 [link] "feedItem-by-whiskers.test" actions: ["Reply", "Repost", "Open post options menu"]`,
+@e1 [application] "Bluesky" (0,0,390,844)
+@e2 [window] (0,0,390,844)
+@e3 [collection] (0,60,390,700)
+@e72 [link] "feedItem-by-whiskers.test" actions: ["Reply", "Repost", "Open post options menu"] (0,60,390,140)`,
 };

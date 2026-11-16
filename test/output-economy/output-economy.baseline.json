@@ -1,6 +1,6 @@
 {
   "snapshot.default.text": {
-    "bytes": 160,
+    "bytes": 222,
     "lines": 6,
     "refs": 4,
     "hints": 0,
@@ -14,11 +14,11 @@
     "shape": "$.nodes:array|$.nodes[].depth:number|$.nodes[].enabled:boolean|$.nodes[].hittable:boolean|$.nodes[].identifier:string|$.nodes[].index:number|$.nodes[].kind:string|$.nodes[].label:string|$.nodes[].parentIndex:number|$.nodes[].rect.height:number|$.nodes[].rect.width:number|$.nodes[].rect.x:number|$.nodes[].rect.y:number|$.nodes[].rect:object|$.nodes[].ref:string|$.nodes[].role:string|$.nodes[].type:string|$.nodes[].value:string|$.nodes[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
   },
   "snapshot.digest.json": {
-    "bytes": 214,
+    "bytes": 310,
     "lines": 1,
     "refs": 2,
     "hints": 0,
-    "shape": "$.nodeCount:number|$.refs:array|$.refsGeneration:number|$.refs[].label:string|$.refs[].ref:string|$.refs[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
+    "shape": "$.nodeCount:number|$.refs:array|$.refsGeneration:number|$.refs[].label:string|$.refs[].rect.height:number|$.refs[].rect.width:number|$.refs[].rect.x:number|$.refs[].rect.y:number|$.refs[].rect:object|$.refs[].ref:string|$.refs[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
   },
   "settle.default.text": {
     "bytes": 161,
@@ -105,7 +105,7 @@
     "shape": "$.code:string|$.details.reason:string|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
   },
   "mcp.snapshot.default.json": {
-    "bytes": 228,
+    "bytes": 290,
     "lines": 1,
     "refs": 4,
     "hints": 0,
@@ -147,14 +147,14 @@
     "shape": "$.artifacts:array|$.artifacts[].artifactId:string|$.artifacts[].artifactType:string|$.artifacts[].field:string|$.artifacts[].fileName:string|$.artifacts[]:object|$.chunks:array|$.chunks[].index:number|$.chunks[].path:string|$.chunks[]:object|$.durationMs:number|$.outPath:string|$.overlayWarning:string|$.recording:string|$.recordingBackend:string|$.recordingScope:string|$.showTouches:boolean|$.telemetryPath:string|$.warning:string|$:object"
   },
   "workflow.orient.cli.text": {
-    "bytes": 154,
+    "bytes": 216,
     "lines": 6,
     "refs": 4,
     "hints": 0,
     "shape": "text"
   },
   "workflow.orient.mcp.json": {
-    "bytes": 228,
+    "bytes": 290,
     "lines": 1,
     "refs": 4,
     "hints": 0,
