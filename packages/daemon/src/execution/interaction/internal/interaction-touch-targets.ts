@@ -7,6 +7,7 @@ import type {
 } from '@agent-device/contracts/interaction';
 import {
   readFillTargetFromPositionals,
+  readPlainTextTouchSelector,
   stripAtPrefix,
   type DecodedFillTarget,
 } from '@agent-device/selectors/interaction-positionals';
@@ -29,6 +30,9 @@ export type ParsedTouchTarget =
       /** Only `longpress` decodes a duration. */ durationMs?: never;
     })
   | { ok: false; response: DaemonResponse };
+
+/** The tap family members that read plain text (`press General`) as a text match. */
+const PLAIN_TEXT_TOUCH_COMMANDS: ReadonlySet<string> = new Set(['press', 'click', 'longpress']);
 
 /** The tap family members a multi-ref sequence is admitted on: the commands that own `--count`. */
 const SEQUENCE_TOUCH_COMMANDS: ReadonlySet<string> = new Set(['press', 'click']);
@@ -84,7 +88,15 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
       refGeneration: versioned.generation,
     };
   }
-  const selector = positionals.join(' ').trim();
+  return parseTouchSelectorTarget(positionals, commandLabel);
+}
+
+/** A non-ref, non-point target: a selector expression, or plain text for the tap family. */
+function parseTouchSelectorTarget(positionals: string[], commandLabel: string): ParsedTouchTarget {
+  const plainTextSelector = PLAIN_TEXT_TOUCH_COMMANDS.has(commandLabel)
+    ? readPlainTextTouchSelector(positionals)
+    : null;
+  const selector = plainTextSelector ?? positionals.join(' ').trim();
   if (!selector) {
     return {
       ok: false,
@@ -280,7 +292,7 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
 // uniform INVALID_ARGS response.
 function decodeFillTarget(positionals: string[]): DecodedFillTarget | null {
   try {
-    return readFillTargetFromPositionals(positionals);
+    return readFillTargetFromPositionals(positionals, { acceptPlainText: true });
   } catch {
     return null;
   }

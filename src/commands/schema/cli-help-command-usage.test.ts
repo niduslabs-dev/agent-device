@@ -54,7 +54,7 @@ test('usageForCommand documents the screenshot diff input containers', async () 
 test('usageForCommand resolves longpress help', async () => {
   const help = await usageForCommand('longpress');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
+  assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector\|name> \[durationMs\]/);
 });
 
 test('usageForCommand documents tv-remote longpress preset', async () => {
@@ -68,7 +68,7 @@ test('usageForCommand documents tv-remote longpress preset', async () => {
 test('usageForCommand supports legacy long-press alias', async () => {
   const help = await usageForCommand('long-press');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
+  assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector\|name> \[durationMs\]/);
   assert.doesNotMatch(help ?? '', /agent-device long-press/);
 });
 

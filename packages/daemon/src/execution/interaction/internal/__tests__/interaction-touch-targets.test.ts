@@ -30,6 +30,35 @@ test('parseTouchTarget keeps invalid coordinates as selector text', () => {
   });
 });
 
+test('parseTouchTarget reads raw plain text as a text-match selector for the tap family only', () => {
+  const chain =
+    'label="General" hittable=true || label="General" || value="General" hittable=true || value="General" || id="General" hittable=true || id="General"';
+  for (const command of ['press', 'click']) {
+    expect(parseTouchTarget(['General'], command)).toEqual({
+      ok: true,
+      target: { kind: 'selector', selector: chain },
+    });
+  }
+  expect(parseLongPressTarget(['General', '800'])).toEqual({
+    ok: true,
+    target: { kind: 'selector', selector: chain },
+    durationMs: 800,
+  });
+  // A chain the CLI already built arrives as a selector expression and passes through unchanged.
+  expect(parseTouchTarget([chain], 'press')).toEqual({
+    ok: true,
+    target: { kind: 'selector', selector: chain },
+  });
+  expect(parseTouchTarget(['label="General"'], 'press')).toEqual({
+    ok: true,
+    target: { kind: 'selector', selector: 'label="General"' },
+  });
+  expect(parseTouchTarget(['General'], 'hover')).toEqual({
+    ok: true,
+    target: { kind: 'selector', selector: 'General' },
+  });
+});
+
 test('parseFillTarget reads selector text through shared grammar', () => {
   const parsed = parseFillTarget(['label="Email"', 'qa@example.com']);
 

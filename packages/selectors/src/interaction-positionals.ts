@@ -28,9 +28,75 @@ export type DecodedFillTarget =
   | { kind: 'point'; target: { x: number; y: number }; text: string | undefined };
 
 const BARE_SNAPSHOT_REF_PATTERN = /^e\d+$/;
+/** A mistyped ref list such as `,@e1` is a ref mistake, not text to search for. */
+const EMBEDDED_SNAPSHOT_REF_PATTERN = /@e\d+/;
+
+/**
+ * What the caller does with a plain-text target. It decides which matches the generated
+ * selector tries first: a tap prefers a hittable match, a fill prefers an editable one.
+ */
+type PlainTextTargetUse = 'tap' | 'fill';
+
+const PLAIN_TEXT_PREFERENCE_TERM: Record<PlainTextTargetUse, string> = {
+  tap: 'hittable=true',
+  fill: 'editable=true',
+};
+
+/** Fields a plain-text target matches, in priority order. */
+const PLAIN_TEXT_FIELDS = ['label', 'value', 'id'] as const;
+
+/**
+ * Plain text such as `press General` or `fill Search wallpaper` is not a separate target kind.
+ * It becomes an ordinary selector fallback chain: label, then value, then id, each tried first
+ * with the use's preference term. The first alternative that matches anything decides, so a
+ * preference only narrows within one field and never reaches past a better field. Several
+ * matches that remain are refused by the acting pipeline like any other selector (ADR 0011).
+ */
+function plainTextTargetSelector(text: string, use: PlainTextTargetUse): string {
+  const value = quoteSelectorValue(text);
+  const preference = PLAIN_TEXT_PREFERENCE_TERM[use];
+  return PLAIN_TEXT_FIELDS.flatMap((field) => [
+    `${field}=${value} ${preference}`,
+    `${field}=${value}`,
+  ]).join(' || ');
+}
+
+/**
+ * The text of positionals that are none of the other target shapes, or null. A ref (`@e3`,
+ * and a literal `@handle`), a bare `e3`, a number (half of an `x y` point) and any `key=value`
+ * token keep their own handling and refusals.
+ */
+function readPlainTextTarget(positionals: readonly string[]): string | null {
+  const first = positionals[0];
+  if (first === undefined || first.startsWith('@') || BARE_SNAPSHOT_REF_PATTERN.test(first)) {
+    return null;
+  }
+  if (first.trim() !== '' && Number.isFinite(Number(first))) return null;
+  if (positionals.some(isSelectorShapedToken)) return null;
+  const text = positionals.join(' ').trim();
+  return text === '' ? null : text;
+}
+
+function isSelectorShapedToken(token: string): boolean {
+  if (token.trim() === '||' || EMBEDDED_SNAPSHOT_REF_PATTERN.test(token)) return true;
+  if (!token.includes('=')) return false;
+  return isSelectorToken(token) || detectUnknownSelectorKeyToken(token) !== null;
+}
+
+/**
+ * The selector a `press`/`click`/`longpress` plain-text target stands for, or null when the
+ * positionals are a selector expression or not plain text. The daemon calls this for raw
+ * positionals that did not come through the CLI reader.
+ */
+export function readPlainTextTouchSelector(positionals: string[]): string | null {
+  if (splitSelectorFromArgs(positionals)) return null;
+  const text = readPlainTextTarget(positionals);
+  return text === null ? null : plainTextTargetSelector(text, 'tap');
+}
 
 export function readInteractionTargetFromPositionals(
   positionals: string[],
+  options: { acceptPlainText?: boolean } = {},
 ): PositionalInteractionTarget {
   if (positionals[0]?.startsWith('@')) {
     const label = optionalTrimmedText(positionals.slice(1));
@@ -52,10 +118,22 @@ export function readInteractionTargetFromPositionals(
     }
     return { selector: selectorArgs.selectorExpression };
   }
+  if (options.acceptPlainText) {
+    const plainText = readPlainTextTarget(positionals);
+    if (plainText !== null) return { selector: plainTextTargetSelector(plainText, 'tap') };
+  }
   return readPointTarget(positionals);
 }
 
-export function readFillTargetFromPositionals(positionals: string[]): DecodedFillTarget {
+/**
+ * `acceptPlainText` reads a first positional that is no other target shape as a text match.
+ * `fill --text-stdin` leaves it off: a stray positional there may be the secret itself, and a
+ * text target would carry it into the selector and its errors.
+ */
+export function readFillTargetFromPositionals(
+  positionals: string[],
+  options: { acceptPlainText?: boolean } = {},
+): DecodedFillTarget {
   const firstPositional = positionals[0];
   if (firstPositional?.startsWith('@')) {
     const textPositionals = positionals.slice(1);
@@ -78,6 +156,15 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
       kind: 'selector',
       target: { selector: selectorArgs.selectorExpression },
       text: selectorArgs.rest.length === 0 ? undefined : selectorArgs.rest.join(' '),
+    };
+  }
+  const plainText = options.acceptPlainText ? readPlainTextTarget(positionals.slice(0, 1)) : null;
+  if (plainText !== null) {
+    const textPositionals = positionals.slice(1);
+    return {
+      kind: 'selector',
+      target: { selector: plainTextTargetSelector(plainText, 'fill') },
+      text: textPositionals.length === 0 ? undefined : textPositionals.join(' '),
     };
   }
   const pointText = positionals.slice(2);

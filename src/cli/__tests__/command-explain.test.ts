@@ -88,7 +88,7 @@ describe('explainCommand', () => {
           mcp: true,
           postActionObservation: 'settle-and-verify',
         },
-        cli: { usage: 'click <x y|@ref|@ref,...|selector>' },
+        cli: { usage: 'click <x y|@ref|@ref,...|selector|name>' },
       },
     });
     if (!result.found) return;

@@ -194,7 +194,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /strict disappearance uses wait absent <selector>/);
   assert.match(
     help,
-    /Chain confident consecutive steps with &&: press 'label="Search"' --settle && fill 'label="Search"' "query" --settle/,
+    /Chain confident consecutive steps with &&: press Search --settle && fill Search "query" --settle/,
   );
   assert.match(help, /Fall back to one command at a time when a step is uncertain/);
   assert.match(help, /never a placeholder \(@ref, @eN, @Label_Name\)/);

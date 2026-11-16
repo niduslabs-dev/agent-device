@@ -107,3 +107,78 @@ test('readFillTargetFromPositionals treats every token after a ref as text', () 
     text: 'good morning',
   });
 });
+
+const GENERAL_TAP_CHAIN =
+  'label="General" hittable=true || label="General" || value="General" hittable=true || value="General" || id="General" hittable=true || id="General"';
+
+test('readInteractionTargetFromPositionals reads plain text as a label/value/id chain that prefers hittable', () => {
+  assert.deepEqual(readInteractionTargetFromPositionals(['General'], { acceptPlainText: true }), {
+    selector: GENERAL_TAP_CHAIN,
+  });
+  // Unquoted words join into one text, and a quote in the text stays inside the selector value.
+  const quoted = String.raw`"Say \"hi\""`;
+  assert.deepEqual(
+    readInteractionTargetFromPositionals(['Say', '"hi"'], { acceptPlainText: true }),
+    {
+      selector: [
+        `label=${quoted} hittable=true`,
+        `label=${quoted}`,
+        `value=${quoted} hittable=true`,
+        `value=${quoted}`,
+        `id=${quoted} hittable=true`,
+        `id=${quoted}`,
+      ].join(' || '),
+    },
+  );
+});
+
+test('readInteractionTargetFromPositionals keeps refs, selectors and refusals ahead of plain text', () => {
+  const plain = { acceptPlainText: true };
+  assert.deepEqual(readInteractionTargetFromPositionals(['@handle'], plain), { ref: '@handle' });
+  assert.deepEqual(readInteractionTargetFromPositionals(['text="Sign in"'], plain), {
+    selector: 'text="Sign in"',
+  });
+  assert.deepEqual(readInteractionTargetFromPositionals(['10', '20'], plain), { x: 10, y: 20 });
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['e12'], plain),
+    'Did you mean "@e12"?',
+  );
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['button="Push Article"'], plain),
+    'Unknown selector key "button".',
+  );
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['visible=maybe'], plain),
+    'is not a @ref, selector, or "x y" point',
+  );
+  // A lone number is half a point, not text.
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['12'], plain),
+    'is not a @ref, selector, or "x y" point',
+  );
+  // Callers that do not opt in (hover) keep the refusal.
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['General']),
+    'To match by visible text, use text="General"',
+  );
+});
+
+test('readFillTargetFromPositionals reads a plain-text target as a chain that prefers editable', () => {
+  const plain = { acceptPlainText: true };
+  assert.deepEqual(readFillTargetFromPositionals(['Search', 'wallpaper', 'art'], plain), {
+    kind: 'selector',
+    target: {
+      selector:
+        'label="Search" editable=true || label="Search" || value="Search" editable=true || value="Search" || id="Search" editable=true || id="Search"',
+    },
+    text: 'wallpaper art',
+  });
+  // A forgotten text argument stays distinguishable from the clear request.
+  assert.equal(readFillTargetFromPositionals(['Search'], plain).text, undefined);
+  assert.equal(readFillTargetFromPositionals(['Search', ''], plain).text, '');
+  // Without the opt-in (fill --text-stdin), a stray positional is never read as a target.
+  assertInvalidArgs(
+    () => readFillTargetFromPositionals(['Search']),
+    'is not a @ref, selector, or "x y" point',
+  );
+});

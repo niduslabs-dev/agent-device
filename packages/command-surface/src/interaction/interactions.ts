@@ -39,7 +39,7 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    ...readInteractionTargetFromPositionals(positionals),
+    ...readInteractionTargetFromPositionals(positionals, { acceptPlainText: true }),
     button: flags.clickButton,
     verify: flags.verify,
   }),
@@ -47,7 +47,7 @@ export const interactionCliReaders = {
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
-    ...readInteractionTargetFromPositionals(positionals),
+    ...readInteractionTargetFromPositionals(positionals, { acceptPlainText: true }),
     verify: flags.verify,
   }),
   longpress: (positionals, flags) => {
@@ -85,7 +85,7 @@ export const interactionCliReaders = {
   fill: (positionals, flags) => {
     const decoded = flags.textStdin
       ? readStdinFillTarget(positionals)
-      : readFillTargetFromPositionals(positionals);
+      : readFillTargetFromPositionals(positionals, { acceptPlainText: true });
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
@@ -191,7 +191,7 @@ function readStdinFillTarget(
 function readLongPressTargetFromPositionals(positionals: string[]): LongPressOptions {
   const targetPositionals = readLongPressTargetPositionals(positionals);
   return {
-    ...readInteractionTargetFromPositionals(targetPositionals.target),
+    ...readInteractionTargetFromPositionals(targetPositionals.target, { acceptPlainText: true }),
     ...(targetPositionals.durationMs !== undefined
       ? { durationMs: targetPositionals.durationMs }
       : {}),
