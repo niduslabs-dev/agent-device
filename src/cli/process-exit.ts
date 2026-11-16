@@ -1,4 +1,5 @@
 import { sleep } from '@agent-device/host-kit/retry';
+import { capturedCliExit } from './nidus-cli-capture.ts';
 
 const FLUSH_TIMEOUT_MS = 2000;
 
@@ -13,6 +14,8 @@ const FLUSH_TIMEOUT_MS = 2000;
  * rather than hanging the process.
  */
 export async function exitAfterFlush(code: number): Promise<never> {
+  const captured = capturedCliExit(code);
+  if (captured) return await captured;
   await Promise.race([drainStdio(), sleep(FLUSH_TIMEOUT_MS)]);
   process.exit(code);
 }
