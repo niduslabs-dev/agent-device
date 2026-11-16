@@ -119,7 +119,7 @@ test('the native client prints what the Node CLI prints', async (t) => {
     for (const args of NATIVE_CASES) {
       const label = `agent-device ${args.join(' ')}`;
       const traced = run(NATIVE_BIN, args, { ...env, AGENT_DEVICE_NATIVE_TRACE: '1' }, cwd);
-      assert.match(traced.stderr, /^agent-device-native: native$/m, `${label}: route`);
+      assert.match(traced.stderr, /^agent-device-native: native \(/m, `${label}: route`);
       assertSame(
         label,
         run(process.execPath, [NODE_BIN, ...args], env, cwd),

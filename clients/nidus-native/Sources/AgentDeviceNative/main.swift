@@ -5,6 +5,13 @@ import Darwin
 // the Node CLI produced. Anything else runs the Node CLI itself on the same argv.
 
 let trace = Host.env("AGENT_DEVICE_NATIVE_TRACE") == "1"
+let startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+
+/// Milliseconds since this process started its own work, for the trace line.
+func elapsedMs(since start: UInt64 = startedAt) -> String {
+  let tenths = (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - start) / 100_000
+  return "\(tenths / 10).\(tenths % 10)"
+}
 
 func traceLine(_ text: String) {
   if trace { Host.emit(2, "agent-device-native: \(text)\n") }
@@ -119,6 +126,8 @@ guard let request = buildRequest(arguments: arguments, cwd: cwd, token: daemon.t
 
 // MARK: request
 
+let admittedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+let admissionMs = elapsedMs()
 switch DaemonSocket.send(request, to: daemon) {
 case .notSent:
   runNodeCli("connection refused")
@@ -136,7 +145,7 @@ case .replied(let response):
     runNodeCli("client-only: \(data["reason"]?.stringValue ?? "unknown")", daemonIsReusable: true)
   case "exit":
     guard let exitCode = data["exitCode"]?.int64Value, let output = data["output"]?.arrayValue else { break }
-    traceLine("native")
+    traceLine("native (client \(admissionMs) ms, daemon \(elapsedMs(since: admittedAt)) ms)")
     for write in output {
       guard let parts = write.arrayValue, parts.count == 2, let fd = parts[0].int64Value, fd == 1 || fd == 2,
         let text = parts[1].stringValue
