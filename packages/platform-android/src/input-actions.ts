@@ -30,6 +30,7 @@ import { sleep } from '@agent-device/host-kit/retry';
 import { runAndroidShell } from './adb.ts';
 import { androidAdbResultError, discloseAdbInputDispatch } from './adb-failure.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewportReading } from './touch-executor.ts';
+import { forgetAndroidDisplayOrientation } from './snapshot-capture.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
 
 /**
@@ -46,7 +47,9 @@ export async function pressAndroid(
   options?: AndroidInputDispatchOptions,
 ): Promise<void> {
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
+  const { tapAndroidEmulatorOverGrpc } = await import('./emulator-grpc-input.ts');
   try {
+    if ((await tapAndroidEmulatorOverGrpc(device, x, y, options?.signal)) === 'dispatched') return;
     if (
       !options?.signal &&
       (await runAndroidAutomationHelper(device, { action: 'input', input: { kind: 'tap', x, y } }))
@@ -77,6 +80,16 @@ export async function doubleTapAndroid(
   }
 }
 
+/** The emulator's gRPC key route (ADR 0041); `unavailable` leaves the key to the helper or adb. */
+async function pressAndroidEmulatorKey(
+  device: DeviceInfo,
+  keyCode: number,
+  signal?: AbortSignal,
+): Promise<'dispatched' | 'unavailable'> {
+  const { pressAndroidEmulatorKeyOverGrpc } = await import('./emulator-grpc-input.ts');
+  return await pressAndroidEmulatorKeyOverGrpc(device, keyCode, signal);
+}
+
 export async function pressAndroidTvRemote(
   device: DeviceInfo,
   button: TvRemoteButton,
@@ -91,6 +104,7 @@ export async function backAndroid(
   device: DeviceInfo,
   options?: AndroidInputDispatchOptions,
 ): Promise<void> {
+  if ((await pressAndroidEmulatorKey(device, 4, options?.signal)) === 'dispatched') return;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     !options?.signal &&
@@ -108,6 +122,7 @@ export async function backAndroid(
 }
 
 export async function homeAndroid(device: DeviceInfo): Promise<void> {
+  if ((await pressAndroidEmulatorKey(device, 3)) === 'dispatched') return;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     await runAndroidAutomationHelper(device, {
@@ -120,6 +135,7 @@ export async function homeAndroid(device: DeviceInfo): Promise<void> {
 }
 
 export async function pressAndroidEnter(device: DeviceInfo): Promise<void> {
+  if ((await pressAndroidEmulatorKey(device, 66)) === 'dispatched') return;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     await runAndroidAutomationHelper(device, {
@@ -136,6 +152,7 @@ export async function setAndroidOrientation(
   orientation: DeviceRotation,
 ): Promise<void> {
   const userRotation = resolveAndroidUserRotation(orientation);
+  forgetAndroidDisplayOrientation(device);
   await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '0']);
   await runAndroidShell(device, ['settings', 'put', 'system', 'user_rotation', userRotation]);
   await settleAndroidOrientation(device, orientation, userRotation);
@@ -143,6 +160,7 @@ export async function setAndroidOrientation(
 
 /** No display settle: the sensor picks the next rotation, so there is no target to wait for. */
 export async function unlockAndroidOrientation(device: DeviceInfo): Promise<void> {
+  forgetAndroidDisplayOrientation(device);
   await runAndroidShell(device, ['settings', 'put', 'system', 'accelerometer_rotation', '1']);
 }
 
@@ -249,6 +267,7 @@ export async function probeAndroidDisplayRotation(
 }
 
 export async function appSwitcherAndroid(device: DeviceInfo): Promise<void> {
+  if ((await pressAndroidEmulatorKey(device, 187)) === 'dispatched') return;
   const { runAndroidAutomationHelper } = await import('./automation-helper.ts');
   if (
     await runAndroidAutomationHelper(device, {

@@ -15,6 +15,8 @@ See `git log upstream/main..main` for the exact list. In short:
 - Android: stopped AVDs are reported as shut down, running emulators by their AVD name, and a fill
   no longer taps a field that already has focus.
 - Faster fills, key events, capture settling and daemon-client startup.
+- Android emulator input (taps, swipes, scrolls, back, home) goes through the emulator's own gRPC
+  endpoint instead of the snapshot helper (ADR 0041).
 
 Fork-only files use a `nidus` name so upstream rebases do not conflict:
 `.github/workflows/nidus-release.yml`, `scripts/nidus/` and this page.

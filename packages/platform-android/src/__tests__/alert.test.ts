@@ -7,6 +7,7 @@ import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-she
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { button, node, text } from './alert-fixtures.ts';
+import './test-utils/android-host-test-setup.ts';
 
 type FakeShellOptions = { signal?: AbortSignal };
 const runAndroidAdb = vi.fn(

@@ -32,6 +32,13 @@ for (const name of AMBIENT_DAEMON_ENV_VARS) {
   delete process.env[name];
 }
 
+// A host with a running Android emulator registers it under the real home directory, and the
+// emulator gRPC input route (ADR 0041) would find it for every `emulator-5554` fixture: an extra
+// `adb emu avd name` call, then input sent to a real device. CI has no registration, so switching the
+// route off here makes a host with an emulator match CI. Tests of the route bind their own host
+// environment, which leaves it on.
+process.env.AGENT_DEVICE_ANDROID_EMULATOR_GRPC = '0';
+
 // Provider-backed scenarios intentionally use local device identities so their
 // request path covers enforced-claim ownership. Each Vitest fork, however,
 // mocks the same identities (for example `sim-1`). Keeping claims under the

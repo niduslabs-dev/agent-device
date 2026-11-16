@@ -566,6 +566,18 @@
     "dispatched": "unknown"
   },
   {
+    "id": "android-emulator-grpc.key.failed-after-send",
+    "producer": "android-emulator-grpc",
+    "trigger": "the emulator answered sendKey with a gRPC status other than an authentication or method refusal, so the key may have been scheduled",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "android-emulator-grpc.tap.release-failed",
+    "producer": "android-emulator-grpc",
+    "trigger": "the touch down reached the emulator and the lift call failed; the lift is sent again and the tap may have landed",
+    "dispatched": "unknown"
+  },
+  {
     "id": "webdriver.connect-refused",
     "producer": "webdriver",
     "trigger": "a mutating POST to a port nothing listens on: the connection was refused before any byte of the request was sent",

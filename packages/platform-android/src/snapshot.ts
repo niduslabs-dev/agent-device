@@ -89,6 +89,7 @@ import { ANDROID_WINDOW_TYPE_INPUT_METHOD, readAndroidSiblingOrder } from './ui-
 import {
   androidSnapshotViewportFromHelperMetadata,
   createAndroidSnapshotCapture,
+  noteAndroidDisplayOrientation,
   type AndroidSnapshotCapture,
 } from './snapshot-capture.ts';
 
@@ -146,6 +147,7 @@ export async function snapshotAndroid(
   options: AndroidSnapshotOptions = {},
 ): Promise<AndroidSnapshotCapture> {
   const capture = await captureAndroidUiHierarchy(device, options);
+  noteAndroidDisplayOrientation(device, capture.helperMetadata);
   // The one place Android answers the viewport question (#3182): the helper's own display read,
   // through the shared guard, so both the healthy and the presentation-failed capture below publish
   // the same box the tree was measured against, and a display the helper could not address stays

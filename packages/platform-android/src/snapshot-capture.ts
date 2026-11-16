@@ -13,6 +13,7 @@ import type {
   SnapshotQualityNote,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotBackend } from '@agent-device/contracts/snapshot-model';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type { AndroidSnapshotHelperMetadata } from './snapshot-helper-types.ts';
@@ -91,4 +92,54 @@ export function androidSnapshotPublicationInput(
     attachSnapshotOcclusionContextEvidence(publication, evidence.occlusionContext);
   }
   return publication;
+}
+
+/**
+ * The rotation and extent of a device's main display as its latest helper capture read them.
+ *
+ * Input that reaches the device below the window manager (the emulator's virtual touchscreen) is in
+ * the panel's natural orientation, while every point agent-device holds was read in the display's
+ * current rotation. This record is what places one in the other: it comes from the same capture the
+ * points came from, so a ref and the rotation it is placed with always agree.
+ */
+export type AndroidDisplayOrientation = Readonly<{
+  /** `Surface.ROTATION_*`: 0 natural, 1 a quarter turn, 2 a half turn, 3 three quarters. */
+  rotation: 0 | 1 | 2 | 3;
+  width: number;
+  height: number;
+}>;
+
+const orientations = new Map<string, AndroidDisplayOrientation>();
+
+/** Records what a capture read, or forgets the record when the capture could not say. */
+export function noteAndroidDisplayOrientation(
+  device: DeviceInfo,
+  metadata: Pick<
+    AndroidSnapshotHelperMetadata,
+    'displayWidth' | 'displayHeight' | 'displayRotation'
+  >,
+): void {
+  const { displayWidth: width, displayHeight: height, displayRotation: rotation } = metadata;
+  if (
+    (rotation === 0 || rotation === 1 || rotation === 2 || rotation === 3) &&
+    width !== undefined &&
+    height !== undefined &&
+    width > 0 &&
+    height > 0
+  ) {
+    orientations.set(device.id, { rotation, width, height });
+    return;
+  }
+  orientations.delete(device.id);
+}
+
+/** Forgets the record of a device whose rotation is about to change. */
+export function forgetAndroidDisplayOrientation(device: DeviceInfo): void {
+  orientations.delete(device.id);
+}
+
+export function readAndroidDisplayOrientation(
+  device: DeviceInfo,
+): AndroidDisplayOrientation | undefined {
+  return orientations.get(device.id);
 }
