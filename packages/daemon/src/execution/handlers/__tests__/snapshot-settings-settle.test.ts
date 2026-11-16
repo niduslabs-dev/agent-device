@@ -80,7 +80,7 @@ test.each([
     const response = await runSettings([setting, state], true);
 
     expect(response.ok).toBe(true);
-    expect(response.ok && response.data.settle).toEqual(SETTLED);
+    expect(response.ok && response.data?.settle).toEqual(SETTLED);
     expect(settleCalls).toHaveLength(1);
     expect(settleCalls[0]?.mutationsSoFar).toBe(1);
     expect(settleCalls[0]?.options.session).toBe('android-settings-settle');
@@ -91,7 +91,7 @@ test('settings that do not redraw the UI answer without a settle wait', async ()
   const response = await runSettings(['wifi', 'on'], true);
 
   expect(response.ok).toBe(true);
-  expect(response.ok && response.data.settle).toBeUndefined();
+  expect(response.ok && response.data?.settle).toBeUndefined();
   expect(settleCalls).toHaveLength(0);
   expect(fixtureSettingsMutations).toHaveLength(1);
 });
@@ -100,7 +100,7 @@ test('settings appearance without a session answers without a settle wait', asyn
   const response = await runSettings(['appearance', 'dark'], false);
 
   expect(response.ok).toBe(true);
-  expect(response.ok && response.data.settle).toBeUndefined();
+  expect(response.ok && response.data?.settle).toBeUndefined();
   expect(settleCalls).toHaveLength(0);
   expect(fixtureSettingsMutations).toHaveLength(1);
 });
