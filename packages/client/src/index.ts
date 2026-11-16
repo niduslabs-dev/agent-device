@@ -1,5 +1,5 @@
 import type { CommandFlags, InternalRequestOptions } from '@agent-device/contracts/command';
-import { readPostGestureOutcome } from '@agent-device/contracts/snapshot';
+import { isSnapshotBackend, readPostGestureOutcome } from '@agent-device/contracts/snapshot';
 import {
   readSerializedSnapshotCaptureAnnotations,
   readSnapshotDiagnosticsSummary,
@@ -569,6 +569,7 @@ function normalizeSnapshotResult(
   return {
     nodes: readSnapshotNodes(data.nodes),
     ...(typeof data.truncated === 'boolean' ? { truncated: data.truncated } : {}),
+    ...(isSnapshotBackend(data.backend) ? { backend: data.backend } : {}),
     appName: readOptionalString(data, 'appName'),
     appBundleId,
     ...optionalSnapshotResponseFields(data),

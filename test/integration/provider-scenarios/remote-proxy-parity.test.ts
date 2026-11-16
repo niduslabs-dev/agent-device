@@ -323,6 +323,7 @@ const PUBLISHED_SNAPSHOT_RESULT_KEYS = ['data', 'ok'] as const;
 const PUBLISHED_SNAPSHOT_DATA_KEYS = [
   'appBundleId',
   'appName',
+  'backend',
   'nodes',
   'refsGeneration',
   'snapshotDiagnostics',
