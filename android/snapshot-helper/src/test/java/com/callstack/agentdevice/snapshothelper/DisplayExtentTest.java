@@ -3,8 +3,8 @@ package com.callstack.agentdevice.snapshothelper;
 public final class DisplayExtentTest {
   private DisplayExtentTest() {}
 
-  private static final DisplayExtent.Extent PORTRAIT = new DisplayExtent.Extent(1080, 2400);
-  private static final DisplayExtent.Extent LANDSCAPE = new DisplayExtent.Extent(2400, 1080);
+  private static final DisplayExtent.Extent PORTRAIT = new DisplayExtent.Extent(1080, 2400, 0);
+  private static final DisplayExtent.Extent LANDSCAPE = new DisplayExtent.Extent(2400, 1080, 1);
 
   static void run() {
     assertTwoReadsOfTheSameDisplayPublishItsExtent();
@@ -16,7 +16,7 @@ public final class DisplayExtentTest {
     // The rotation matters: a landscape capture publishes the box its bounds are actually measured
     // in, which is why the extent is read per capture rather than kept across a helper session.
     assertExtent(
-        DisplayExtent.whenBothAgree(PORTRAIT, new DisplayExtent.Extent(1080, 2400)),
+        DisplayExtent.whenBothAgree(PORTRAIT, new DisplayExtent.Extent(1080, 2400, 0)),
         1080,
         2400,
         "both reads of one portrait display");
@@ -34,8 +34,13 @@ public final class DisplayExtentTest {
         DisplayExtent.whenBothAgree(PORTRAIT, LANDSCAPE), "display rotated mid-dump");
     assertNull(
         DisplayExtent.whenBothAgree(
-            PORTRAIT, new DisplayExtent.Extent(1076, 2400)),
+            PORTRAIT, new DisplayExtent.Extent(1076, 2400, 0)),
         "display resized mid-dump");
+    // A half turn keeps the extent, but a host placing input in the panel's natural orientation
+    // would mirror every point it read from these bounds.
+    assertNull(
+        DisplayExtent.whenBothAgree(PORTRAIT, new DisplayExtent.Extent(1080, 2400, 2)),
+        "display turned upside down mid-dump");
   }
 
   private static void assertAReadThatFailedPublishesNothing() {

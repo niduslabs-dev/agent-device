@@ -113,6 +113,8 @@ export type AndroidSnapshotHelperMetadata = {
    */
   displayWidth?: number;
   displayHeight?: number;
+  /** The `Surface.ROTATION_*` index the display pair was read in. Absent on an older helper. */
+  displayRotation?: number;
   transport?: AndroidSnapshotHelperTransport;
   sessionReused?: boolean;
 };

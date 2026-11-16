@@ -32,10 +32,16 @@ final class DisplayExtent {
   static final class Extent {
     final int width;
     final int height;
+    /**
+     * The {@code Surface.ROTATION_*} index the extent was read in. A host that injects input in the
+     * panel's natural orientation needs it to place a point it read from these bounds.
+     */
+    final int rotation;
 
-    Extent(int width, int height) {
+    Extent(int width, int height, int rotation) {
       this.width = width;
       this.height = height;
+      this.rotation = rotation;
     }
   }
 
@@ -52,22 +58,29 @@ final class DisplayExtent {
       if (windowManager == null) {
         return null;
       }
+      int rotation = defaultDisplayRotation(windowManager);
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         Rect bounds = windowManager.getMaximumWindowMetrics().getBounds();
-        return new Extent(bounds.width(), bounds.height());
+        return new Extent(bounds.width(), bounds.height(), rotation);
       }
-      return legacyExtent(windowManager);
+      return legacyExtent(windowManager, rotation);
     } catch (Throwable error) {
       return null;
     }
   }
 
   @SuppressWarnings("deprecation")
-  private static Extent legacyExtent(WindowManager windowManager) {
+  private static Extent legacyExtent(WindowManager windowManager, int rotation) {
     Display display = windowManager.getDefaultDisplay();
     DisplayMetrics metrics = new DisplayMetrics();
     display.getRealMetrics(metrics);
-    return new Extent(metrics.widthPixels, metrics.heightPixels);
+    return new Extent(metrics.widthPixels, metrics.heightPixels, rotation);
+  }
+
+  /** An instrumentation context is not a visual context, so the default display is read directly. */
+  @SuppressWarnings("deprecation")
+  private static int defaultDisplayRotation(WindowManager windowManager) {
+    return windowManager.getDefaultDisplay().getRotation();
   }
 
   /**
@@ -79,7 +92,9 @@ final class DisplayExtent {
     if (before == null || after == null) {
       return null;
     }
-    if (before.width != after.width || before.height != after.height) {
+    if (before.width != after.width
+        || before.height != after.height
+        || before.rotation != after.rotation) {
       return null;
     }
     return before;

@@ -42,6 +42,7 @@ test('parses the session envelope and snapshot metadata', () => {
       elapsedMs: undefined,
       displayWidth: undefined,
       displayHeight: undefined,
+      displayRotation: undefined,
     },
   });
 });
@@ -53,7 +54,12 @@ test('parses the session display extent beside its density and absent headers st
   const withDisplay = sessionResponse({
     requestId: 'snapshot-1',
     xml,
-    metadata: { pixelDensity: '2.625', displayWidth: '1080', displayHeight: '2400' },
+    metadata: {
+      pixelDensity: '2.625',
+      displayWidth: '1080',
+      displayHeight: '2400',
+      displayRotation: '1',
+    },
   });
 
   const parsed = parseAndroidSnapshotHelperSessionSnapshotResponse(withDisplay, 'snapshot-1');
@@ -61,6 +67,7 @@ test('parses the session display extent beside its density and absent headers st
   assert.equal(parsed.metadata.pixelDensity, 2.625);
   assert.equal(parsed.metadata.displayWidth, 1080);
   assert.equal(parsed.metadata.displayHeight, 2400);
+  assert.equal(parsed.metadata.displayRotation, 1);
 
   const withoutDisplay = sessionResponse({
     requestId: 'snapshot-1',
@@ -70,6 +77,7 @@ test('parses the session display extent beside its density and absent headers st
   const sparse = parseAndroidSnapshotHelperSessionSnapshotResponse(withoutDisplay, 'snapshot-1');
   assert.equal(sparse.metadata.displayWidth, undefined);
   assert.equal(sparse.metadata.displayHeight, undefined);
+  assert.equal(sparse.metadata.displayRotation, undefined);
 });
 
 test('reads the session window types the helper could not serialize, absent from an older helper', () => {
