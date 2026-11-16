@@ -2,7 +2,8 @@ name: Nidus release
 
 # Fork-only release for niduslabs-dev/agent-device. Upstream's release.yml publishes to npm through
 # trusted publishing and stays disabled in this fork. This workflow only builds the same tarball
-# `pnpm pack` produces and attaches it, with its SHA-256, to a GitHub Release for the tag.
+# `pnpm pack` produces, with the fork's native client inside it, and attaches it, with its SHA-256,
+# to a GitHub Release for the tag.
 # scripts/nidus/install-latest.sh installs from those releases. See docs/nidus-fork.md.
 #
 # Push a `vX.Y.Z-nidus.N` tag to release. Dispatch with that tag to rebuild a release whose run failed.
@@ -95,6 +96,11 @@ jobs:
           node scripts/release-workspace.mjs sync
           node scripts/sync-mcp-metadata.mjs
 
+      # The package's `files` list ships clients/nidus-native/dist. Universal and ad-hoc signed, so
+      # one tarball serves both Mac architectures and the binary runs as installed.
+      - name: Build the native client
+        run: clients/nidus-native/package.sh
+
       # prepack runs `pnpm release:prepare`: it builds every asset and runs the package checks.
       - name: Pack
         id: pack
@@ -109,6 +115,10 @@ jobs:
           if [ ! -f "$out/$tarball" ]; then
             echo "::error::Expected $out/$tarball after pnpm pack." >&2
             ls -la "$out" >&2
+            exit 1
+          fi
+          if ! tar -tzf "$out/$tarball" | grep -qx 'package/clients/nidus-native/dist/agent-device-native'; then
+            echo "::error::$tarball lacks the native client." >&2
             exit 1
           fi
           (cd "$out" && shasum -a 256 "$tarball" > "$tarball.sha256" && cat "$tarball.sha256")
