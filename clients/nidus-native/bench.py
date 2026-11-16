@@ -7,6 +7,7 @@ The daemon gets an empty home and a PATH holding only node, so no device tool is
 command reaches a device. Clients run interleaved, so host load hits both alike. Times include
 Python's own spawn cost (a few ms; `/usr/bin/true` is printed as the floor).
 """
+import json
 import os
 import re
 import shutil
@@ -51,6 +52,18 @@ def traced(argv, env, cwd):
     return (float(match.group(1)), float(match.group(2))) if match else None
 
 
+def worker_rss_mb(state_dir):
+    """Resident memory of the CLI worker the daemon in `state_dir` owns."""
+    with open(os.path.join(state_dir, "daemon.json")) as record:
+        daemon_pid = str(json.load(record)["pid"])
+    table = subprocess.run(["/bin/ps", "-axo", "ppid=,rss=,command="], capture_output=True).stdout.decode()
+    for line in table.splitlines():
+        parent, rss, command = line.split(None, 2)
+        if parent == daemon_pid and "nidus-cli-worker" in command:
+            return int(rss) / 1024
+    return float("nan")
+
+
 def summary(samples):
     return f"{statistics.median(samples):7.1f} ({min(samples):.1f}-{max(samples):.1f})"
 
@@ -72,6 +85,8 @@ def main():
     bun = shutil.which("bun")
     try:
         subprocess.run([node, NODE_BIN, "session", "list"], env=env, cwd=cwd, capture_output=True, check=True)
+        # The first native run starts the daemon's CLI worker; time it apart from the warm runs.
+        print(f"first native run (starts the worker): {timed([NATIVE, 'session', 'list'], env, cwd):.1f} ms")
         floor = [timed(["/usr/bin/true"], env, cwd) for _ in range(RUNS)]
         print(f"runs per cell: {RUNS}; /usr/bin/true floor: {summary(floor)} ms")
         header = f"{'command':58} {'node ms':>22} {'native ms':>22}"
@@ -100,6 +115,7 @@ def main():
             else:
                 row += f" {'fallback':>18}"
             print(row)
+        print(f"CLI worker RSS after the runs: {worker_rss_mb(os.path.join(scratch, 'state')):.0f} MB")
     finally:
         subprocess.run([node, NODE_BIN, "daemon", "stop"], env=env, cwd=cwd, capture_output=True)
         shutil.rmtree(scratch, ignore_errors=True)
