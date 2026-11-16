@@ -14,7 +14,6 @@ import { GESTURE_DURATION_MIN_MS } from '@agent-device/contracts/gesture-plan-ty
 import {
   type ScrollContainerTarget,
   type ScrollReleaseBehavior,
-  DEFAULT_MOBILE_SCROLL_DURATION_MS,
 } from '@agent-device/contracts/scroll-command';
 import {
   type ScrollDirection,
@@ -326,6 +325,14 @@ export async function focusAndroid(device: DeviceInfo, x: number, y: number): Pr
   await pressAndroid(device, x, y);
 }
 
+/**
+ * The pan of an Android `scroll` that names no duration (ADR 0041). The controlled release eases
+ * the finger to rest before it lifts, so the content stops without a fling at this length as well
+ * (measured on the emulator over gRPC and through the helper). It travels about 10% less than a
+ * 300 ms pan; a caller that needs that travel passes its own duration.
+ */
+const DEFAULT_ANDROID_SCROLL_DURATION_MS = 120;
+
 export async function scrollAndroid(
   device: DeviceInfo,
   direction: ScrollDirection,
@@ -365,7 +372,7 @@ export async function scrollAndroid(
     y2: swipeSurface.viewport.y + relativePlan.y2,
   };
   const durationMs = Math.max(
-    options?.durationMs ?? DEFAULT_MOBILE_SCROLL_DURATION_MS,
+    options?.durationMs ?? DEFAULT_ANDROID_SCROLL_DURATION_MS,
     GESTURE_DURATION_MIN_MS,
   );
   const backend = await executeAndroidTouchPlan(device, {

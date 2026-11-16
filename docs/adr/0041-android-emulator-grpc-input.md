@@ -48,6 +48,19 @@ The repository keeps runtime dependencies minimal, and no gRPC or protobuf packa
   A ref press has the same exposure on every route, because the ref's bounds came from that capture.
 - Multi-touch gestures, hardware buttons other than the four keys, TV remote keys, text, and fill keep their existing routes.
 
+### Amendment: a shorter default scroll pan
+
+An Android `scroll` that names no duration pans for 120 ms (`DEFAULT_ANDROID_SCROLL_DURATION_MS` in `input-actions.ts`), not the 300 ms mobile default.
+The amendment applies to every route this record leaves the pan on: the gRPC route and the helper fallback.
+The controlled release is unchanged: the finger eases to rest before it lifts.
+
+Measured on `dev_android36` on 2026-11-17 (Settings, from the top):
+
+- No fling on either route: the list read the same 1 s and 2 s after every scroll.
+- The `scroll` command fell from about 370 ms to 180 to 250 ms when the viewport read before it was fast.
+- A 120 ms pan travels about 10% less: 1054 to 1246 px against 1227 to 1362 px at 300 ms. `docs/evidence/android-long-scroll-2026-10-19.md` rejected a 150 ms pan on the helper route, where a `scroll --until` search then needed 61 passes instead of 55 and took 47.3 s instead of 45.8 s.
+- Accepted anyway, because the per-pass saving now outweighs the extra passes. A pass is the pan plus its check capture, about 0.8 s at 300 ms on this route (scroll about 370 ms, capture about 450 ms). The 120 ms pan saves about 180 ms of each pass. 55 passes at about 0.8 s take about 44 s; 61 passes at about 0.62 s take about 38 s. A caller that needs the longer travel per pass names `--duration-ms 300`.
+
 ## Rejected alternatives
 
 - `@grpc/grpc-js` with generated or loaded protobuf: a runtime dependency and a larger install for three unary calls.
