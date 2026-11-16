@@ -91,6 +91,8 @@ export type SettingDefinition = Readonly<{
   app?: 'input' | 'positional';
   /** A write is refused before dispatch when neither the request nor the session names an app. */
   appRequired?: true;
+  /** A write redraws the whole UI, so a session waits for it to settle before answering. */
+  redrawsUi?: true;
   /** Applies to every form; a form's own `appScope` overrides it. */
   appScope?: FamilyAppScope;
   help: string;
@@ -131,12 +133,14 @@ export const SETTINGS = {
   },
   appearance: {
     forms: [{ kind: 'choice', states: APPEARANCE_ACTIONS }],
-    help: 'Switches to light or dark mode, or toggles it, on Android, Apple simulators, and the macOS host. Android and Apple simulators read the value back: the answer is "Appearance is dark" when it landed and "Appearance dark requested" when it could not be read or differs.',
+    redrawsUi: true,
+    help: 'Switches to light or dark mode, or toggles it, on Android, Apple simulators, and the macOS host. Android and Apple simulators read the value back: the answer is "Appearance is dark" when it landed and "Appearance dark requested" when it could not be read or differs. In a session it answers after the UI settles.',
   },
   'text-size': {
     forms: [{ kind: 'choice', states: TEXT_SIZE_CATEGORIES }],
     readable: true,
-    help: 'Reads the preferred text size without a category and applies one with it, on iPhone and iPad simulators (simctl content size) and Android (system font_scale). Android has no ladder of its own: a read names the nearest rung and reports the multiplier as platformValue. A running app adopts a new size at its next configuration change, so relaunch it.',
+    redrawsUi: true,
+    help: 'Reads the preferred text size without a category and applies one with it, on iPhone and iPad simulators (simctl content size) and Android (system font_scale). Android has no ladder of its own: a read names the nearest rung and reports the multiplier as platformValue. A running app adopts a new size at its next configuration change, so relaunch it. In a session a write answers after the UI settles.',
   },
   faceid: {
     forms: [{ kind: 'choice', states: ['match', 'nonmatch', 'enroll', 'unenroll'] }],

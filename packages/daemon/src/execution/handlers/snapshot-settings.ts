@@ -21,6 +21,8 @@ import {
   settingsRuntimeUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { contextFromFlags } from '../../core/context.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
@@ -51,6 +53,8 @@ export type ParsedSettingsRequest =
 
 type HandleSettingsCommandParams = {
   req: DaemonRequest;
+  createCommandSurface: CreateDaemonCommandSurface;
+  sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
   ref: SessionRef | undefined;
@@ -203,6 +207,7 @@ async function executeSettingsWrite(
   const appBundleId = settingsWriteAppId(req, parsed, session, device);
   const writeRefusal = settingsWriteRefusal(parsed, appBundleId);
   if (writeRefusal !== undefined) return writeRefusal;
+  const observeSettle = session ? await planSettingsSettle(params, parsed, session) : undefined;
   // ADR 0014: an admitted mutation expires the frame before the bound call; a refused one never does.
   if (session) expireRefFrame(session);
   emitDiagnostic({
@@ -220,7 +225,42 @@ async function executeSettingsWrite(
     describeSettingWrite(setting, state, appBundleId),
   );
   recordSessionAction(sessionStore, ref, req, req.command, data);
-  return { ok: true, data };
+  const settle = await observeSettle?.();
+  return { ok: true, data: settle ? { ...data, settle } : data };
+}
+
+/**
+ * A setting that redraws the whole UI answers only after the session's screen settles, so the next
+ * snapshot or screenshot does not catch the app mid-redraw. It reuses the `--settle` loop and its
+ * default budget, which sits inside the command's deadline, and like `--settle` it never fails the
+ * write it follows. Without a session there is no app screen to observe, so nothing waits.
+ */
+async function planSettingsSettle(
+  params: HandleSettingsCommandParams,
+  parsed: SettingsMutation,
+  session: SessionState,
+): Promise<(() => Promise<SettleObservation | undefined>) | undefined> {
+  if (settingDefinition(parsed.setting)?.redrawsUi !== true) return undefined;
+  // Lazy seam, as on the generic route: the settle loop runs the interaction runtime, which a
+  // static edge would fold into the daemon-server type cycle.
+  const { planImpliedSettleObservation } = await import('../generic-settle.ts');
+  return await planImpliedSettleObservation(
+    {
+      createCommandSurface: params.createCommandSurface,
+      sessionRef: params.ref,
+      req: params.req,
+      session,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      contextFromFlags: (flags, appBundleId, traceLogPath) =>
+        contextFromFlags(params.logPath, flags, appBundleId, traceLogPath),
+      platformServices: params.platformServices,
+      inspectFacts: params.inspectFacts,
+      bindDevice: params.bindDevice,
+    },
+    {},
+  );
 }
 
 /** The request input's `app` (CLI `--app`, client and MCP `app`); an empty one names nothing. */

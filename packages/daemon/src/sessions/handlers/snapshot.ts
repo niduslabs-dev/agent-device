@@ -135,6 +135,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   },
   settings: async ({
     req,
+    createCommandSurface,
     sessionName,
     logPath,
     sessionStore,
@@ -152,6 +153,8 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       async () => {
         return await handleSettingsCommand({
           req,
+          createCommandSurface,
+          sessionName,
           logPath,
           sessionStore,
           ref,
