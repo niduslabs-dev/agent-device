@@ -146,6 +146,7 @@ public final class SnapshotInstrumentation extends Instrumentation {
     if (display != null) {
       result.putString("displayWidth", Integer.toString(display.width));
       result.putString("displayHeight", Integer.toString(display.height));
+      result.putString("displayRotation", Integer.toString(display.rotation));
     }
   }
 

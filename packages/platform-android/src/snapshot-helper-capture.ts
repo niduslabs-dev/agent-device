@@ -448,6 +448,7 @@ function readHelperMetadata(finalResult: Record<string, string>): AndroidSnapsho
     pixelDensity: readOptionalNumber(finalResult.pixelDensity),
     displayWidth: readOptionalNumber(finalResult.displayWidth),
     displayHeight: readOptionalNumber(finalResult.displayHeight),
+    displayRotation: readOptionalNumber(finalResult.displayRotation),
   };
 }
 
