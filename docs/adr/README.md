@@ -42,6 +42,7 @@
 | [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 | [0039 Pre-dispatch admission](0039-pre-dispatch-admission.md) | one admission step for resolved-target input: ordered typed checks, one request-bound wait loop, one evidence path, and no extra reads for an idle target |
 | [0040 Post-gesture distrust by producer freshness](0040-post-gesture-distrust-by-producer-freshness.md) | the post-gesture distrust cap, the `postGestureRead` producer fact, and when a quiet pair that equals the pre-gesture tree settles at once |
+| [0041 Android emulator input over gRPC](0041-android-emulator-grpc-input.md) | input on a local Android emulator through its gRPC endpoint, endpoint discovery and identity, placing points in the panel's natural orientation, the fallback rule, and the weaker dispatch acknowledgement |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.

@@ -31,6 +31,9 @@ export async function executeAndroidTouchPlan(
     const result = (await provider.touch(providerPlan)) ?? {};
     return { backend: 'provider-native-touch', ...result };
   }
+  const { runAndroidEmulatorTouchPlanOverGrpc } = await import('./emulator-grpc-input.ts');
+  const emulatorResult = await runAndroidEmulatorTouchPlanOverGrpc(device, loweredPlan, signal);
+  if (emulatorResult) return emulatorResult;
   return await executeAndroidTouchHelperPlan(device, loweredPlan, signal);
 }
 

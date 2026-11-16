@@ -26,6 +26,7 @@ import {
 } from './app-parsers.ts';
 import { androidLaunchCategory, androidLauncherCategories } from './launcher-categories.ts';
 import { getAndroidAppState, getAndroidResumedActivity } from './window-state.ts';
+import { forgetAndroidDisplayOrientation } from './snapshot-capture.ts';
 
 const ANDROID_DEFAULT_CATEGORY = 'android.intent.category.DEFAULT';
 const ANDROID_LOCALHOST_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
@@ -192,6 +193,8 @@ export async function openAndroidApp(
   app: string,
   optionsOrActivity?: OpenAndroidAppOptions | string,
 ): Promise<string | undefined> {
+  // A launched or closed app may set its own orientation; points are placed again after a capture.
+  forgetAndroidDisplayOrientation(device);
   return launchedAndroidPackage(await startAndroidApp(device, app, optionsOrActivity));
 }
 
@@ -616,6 +619,7 @@ export async function openAndroidDevice(device: DeviceInfo): Promise<void> {
 }
 
 export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<void> {
+  forgetAndroidDisplayOrientation(device);
   await stopAndroidPackage(device, await resolveAndroidPackageToEnd(device, app, 'Close'));
 }
 

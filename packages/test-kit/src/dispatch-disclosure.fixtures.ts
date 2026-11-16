@@ -8,6 +8,7 @@ export const DISPATCH_DISCLOSURE_PRODUCERS = [
   'ios-runner',
   'android-adb',
   'android-helper',
+  'android-emulator-grpc',
   'webdriver',
   'web-agent-browser',
   'post-action-guard',
@@ -55,6 +56,7 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'android-helper.': 'packages/platform-android/src/__tests__/index-dispatch-disclosure.test.ts',
   'android-helper.gesture-session.':
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
+  'android-emulator-grpc.': 'packages/platform-android/src/emulator-grpc-input.test.ts',
   'webdriver.': 'packages/provider-webdriver/src/webdriver-transport.test.ts',
   'webdriver.orientation.': 'packages/provider-webdriver/src/webdriver-orientation.test.ts',
   'web-agent-browser.':
