@@ -96,7 +96,9 @@ final class AutomationCommandHandler {
       KeyEvent event = new KeyEvent(down, SystemClock.uptimeMillis(), action, code, 0, 0,
           KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, InputDevice.SOURCE_KEYBOARD);
       dispatch.attempted = true;
-      if (!automation.injectInputEvent(event, true)) {
+      // A key has no coordinate target, so it must not wait out the animation a preceding tap
+      // started. The next capture's freshness recovery owns observing the resulting screen.
+      if (!UiAutomationInputDispatcher.inject(automation, event, true)) {
         throw new IllegalStateException("Key injection was refused");
       }
     }
