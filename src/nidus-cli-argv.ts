@@ -30,9 +30,17 @@ declare const __AGENT_DEVICE_VERSION__: string;
 
 /**
  * Commands whose whole CLI run is daemon requests plus formatting, so it behaves the same inside
- * the daemon as in the client's process.
+ * the daemon as in the client's process. Every other command, including one upstream adds later,
+ * runs in the client's own Node CLI. Those need the client's process:
+ *
+ * - `auth`, `connect`, `connection`, `disconnect`, `proxy`: remote state, sign-in and tunnels.
+ * - `daemon`: the daemon lifecycle. `device`: local device ownership without a daemon.
+ * - `install`, `reinstall`, `install-from-source`: artifact upload and the install notice.
+ * - `replay`, `test`: scripts and reporters read and write client files.
+ * - `record`: local video tools. `metro`, `web`, `cdp`, `react-devtools`, `mcp`: local processes.
+ * - `plugins`: reads the process environment. `takeover`: waits on client signals.
  */
-export const NIDUS_NATIVE_CLI_COMMANDS: ReadonlySet<string> = new Set([
+const NATIVE_CLI_COMMANDS: ReadonlySet<string> = new Set([
   'action-button',
   'alert',
   'app-switcher',
@@ -89,30 +97,6 @@ export const NIDUS_NATIVE_CLI_COMMANDS: ReadonlySet<string> = new Set([
   'viewport',
   'wait',
 ]);
-
-/** Commands that need the client's own process, each with why. The Node CLI runs them. */
-export const NIDUS_CLIENT_ONLY_CLI_COMMANDS: Readonly<Record<string, string>> = {
-  auth: 'cloud login state and browser sign-in',
-  cdp: 'a long-lived local CDP tool',
-  connect: 'remote connection state and leases',
-  connection: 'remote connection state',
-  daemon: 'daemon lifecycle',
-  device: 'local device ownership without a daemon',
-  disconnect: 'remote connection state and leases',
-  install: 'artifact upload and the install notice',
-  'install-from-source': 'artifact download and upload',
-  mcp: 'a long-lived MCP server',
-  metro: 'local dev-server processes',
-  plugins: 'reads the client process environment',
-  proxy: 'a long-lived HTTP tunnel',
-  'react-devtools': 'a long-lived local tool',
-  record: 'local video tools for contact sheets',
-  reinstall: 'artifact upload and the install notice',
-  replay: 'replay scripts and reporters read on the client',
-  takeover: 'waits on client signals',
-  test: 'test reporters write client files',
-  web: 'manages the local web backend',
-};
 
 type NidusCliArgvInput = Readonly<{
   argv: string[];
@@ -228,7 +212,7 @@ function admissionRefusal(input: NidusCliArgvInput, baseDir: string): string | u
   const { command, flags } = parsed;
   if (flags.help || flags.version || command === 'help' || command === null) return undefined;
   if (!isKnownCliCommandName(command)) return undefined;
-  if (!NIDUS_NATIVE_CLI_COMMANDS.has(command)) return `command:${command}`;
+  if (!NATIVE_CLI_COMMANDS.has(command)) return `command:${command}`;
   // `--debug` tails the daemon log on a timer that a captured exit would never stop.
   if (flags.verbose) return 'debug';
   if (flags.textStdin) return 'stdin';

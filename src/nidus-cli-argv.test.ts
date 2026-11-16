@@ -2,18 +2,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import {
-  NIDUS_CLIENT_ONLY_CLI_COMMANDS,
-  NIDUS_NATIVE_CLI_COMMANDS,
-  runNidusCliArgv,
-} from './nidus-cli-argv.ts';
-
-test('every CLI command is classified as native or client-only, exactly once', () => {
-  const clientOnly = Object.keys(NIDUS_CLIENT_ONLY_CLI_COMMANDS);
-  const classified = [...NIDUS_NATIVE_CLI_COMMANDS, ...clientOnly].sort();
-  expect(classified).toEqual([...listCliCommandNames()].sort());
-  expect(clientOnly.filter((name) => NIDUS_NATIVE_CLI_COMMANDS.has(name))).toEqual([]);
-});
+import { runNidusCliArgv } from './nidus-cli-argv.ts';
 
 function request(
   baseDir: string,
@@ -99,4 +88,36 @@ test('a malformed request is refused as invalid arguments', async () => {
   const response = await runNidusCliArgv(request(baseDir, { cwd: 'relative' }));
   expect(response.ok).toBe(false);
   expect(response.ok ? undefined : response.error.code).toBe('INVALID_ARGS');
+});
+
+test('exactly the classified client-only commands are handed back by name', async () => {
+  const baseDir = mkdtempForTestSync('nidus-cli-argv-');
+  const handedBack: string[] = [];
+  for (const command of listCliCommandNames()) {
+    const data = clientOnlyReason(await runNidusCliArgv(request(baseDir, { argv: [command] })));
+    if ((data as { reason?: string }).reason === `command:${command}`) handedBack.push(command);
+  }
+  // A new upstream command lands here until it is added to the native set or to this list.
+  expect(handedBack.sort()).toEqual([
+    'auth',
+    'cdp',
+    'connect',
+    'connection',
+    'daemon',
+    'device',
+    'disconnect',
+    'install',
+    'install-from-source',
+    'mcp',
+    'metro',
+    'plugins',
+    'proxy',
+    'react-devtools',
+    'record',
+    'reinstall',
+    'replay',
+    'takeover',
+    'test',
+    'web',
+  ]);
 });
