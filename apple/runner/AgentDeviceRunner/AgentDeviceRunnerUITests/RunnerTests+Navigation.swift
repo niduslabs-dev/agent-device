@@ -216,11 +216,22 @@ extension RunnerTests {
     }
     guard navigationBarBackButtonIsReadable(context: context) else { return nil }
     let started = currentUptimeMs()
-    let lookup = stillNavigationBarBackButton(
+    var lookup = stillNavigationBarBackButton(
       app: app,
       geometry: context.geometry,
       deadlineMs: started + Self.navigationBarBackReadBudgetMs
     )
+    // A push that a tap just started shows its back button in the tree only once the transition
+    // ends, so a bar with no back button may be one that is still arriving. Wait out the app's
+    // animations once, bounded, and look again before the swipe fallback.
+    if case .notFound("no") = lookup, waitForAppQuiescenceIfSupported(app) {
+      trace.quiescenceRetried = true
+      lookup = stillNavigationBarBackButton(
+        app: app,
+        geometry: context.geometry,
+        deadlineMs: currentUptimeMs() + Self.navigationBarBackReadBudgetMs
+      )
+    }
     trace.lookupMs = currentUptimeMs() - started
     let before: NavigationBarBackState
     let frame: CGRect
@@ -275,6 +286,8 @@ extension RunnerTests {
     var confirmed: String?
     var lookupMs = 0.0
     var confirmMs: Double?
+    /// Whether the lookup found no button, waited for the app to go idle, and looked again.
+    var quiescenceRetried = false
 
     var logLine: String {
       func ms(_ value: Double?) -> String { value.map { String(Int($0.rounded())) } ?? "-" }
@@ -284,6 +297,7 @@ extension RunnerTests {
         "confirmed=\(confirmed ?? "-")",
         "lookupMs=\(ms(lookupMs))",
         "confirmMs=\(ms(confirmMs))",
+        "quiescenceRetried=\(quiescenceRetried ? "yes" : "no")",
       ].joined(separator: " ")
     }
   }

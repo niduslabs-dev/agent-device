@@ -18,6 +18,7 @@ Accepted
 - Within the closed-id retention window, never execute a dispatched non-read `commandId` twice. Never evict a journal entry whose execution has not finished. After a dispatched non-read entry is pruned, keep its id in that window. The kept fact is released only by a memory safety valve; see the admission rule below for its bound.
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
+- On a local iOS Simulator, send a primary single coordinate tap to the Simulator's digitizer service, not through XCTest, when the measuring capture proves the point is outside every text input and the app fills the portrait screen. Otherwise, and whenever that route is unavailable, use the XCTest tap.
 
 ## Context
 
@@ -171,6 +172,29 @@ The snapshot surface intentionally has two AX-failure shapes.
 Interactive fast snapshots return a truncated success payload with `runnerFatal`.
 Thus, agents can still see that AX state is unavailable and recover with a plain screenshot plus coordinate navigation.
 Raw or strict snapshot paths continue to return an error, because those callers requested a faithful tree, not a lossy recovery payload.
+
+### Simulator touch below XCTest
+
+An XCTest tap costs about 420 ms in the runner.
+About 280 ms of it is `synthesizeWithError:` waiting for the XCTest daemon to confirm playback of a 50 ms touch, and lowering the implicit event confirmation interval does not shorten it.
+The rest is the system-modal probe, the windows query, and the event record.
+A local iOS Simulator accepts touches directly from the host through the guest's `dtuhidd` digitizer service, as idb does on CoreSimulator 1155.4 and later.
+`apple/simulator-hid/SimulatorHID.m` is a long-lived macOS helper per Simulator that sends the touch and answers once a barrier sent behind it is answered.
+The daemon admits the route only on a local iOS-family Simulator in the default device set, only with the capture evidence that excludes text inputs, and only when that capture's viewport equals the portrait screen.
+A text-input tap stays on XCTest, because the runner books its focus witness for the next bare `type`.
+A route that cannot start, or a refusal before the touch, falls back to the XCTest tap.
+A touch that was sent but not confirmed fails without a fallback, because the XCTest tap could repeat it.
+Daemon guards before dispatch, `--settle`, and `--verify` are unchanged: they run on either route.
+
+The direct touch returns before the app handles it, sooner than the XCTest tap returned.
+An in-app `back` that arrives during the push the tap started can find no back button yet.
+Therefore, when the back lookup finds no back button, the runner waits once for the app to go idle, bounded by `interactionIdleTimeoutDefault`, and looks again before it uses the edge swipe.
+
+Rejected alternatives:
+
+- Skip XCTest quiescence for the tap: the synthesized route never waits for quiescence, and the XCUICoordinate fallback already skips both waits.
+- Return the XCTest tap before playback is confirmed, behind a runner barrier: the runner tap fell to about 125 ms, which is still slower than the direct touch, and it changes the meaning of every runner tap answer.
+- The legacy Indigo HID message path: CoreSimulator 1155.4 and later drop it.
 
 ## Consequences
 

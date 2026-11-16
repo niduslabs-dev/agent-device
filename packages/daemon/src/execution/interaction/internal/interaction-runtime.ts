@@ -95,7 +95,12 @@ export async function createInteractionRuntimeForRoute(
       const latest = current.snapshot;
       if (!latest || latest.nodes !== pointObservation.nodes || isOutdatedObservation(latest))
         return undefined;
-      return buildCoordinateTapTextInputEvidence(pointObservation, point, current.appBundleId);
+      const evidence = buildCoordinateTapTextInputEvidence(
+        pointObservation,
+        point,
+        current.appBundleId,
+      );
+      return evidence && latest.viewport ? { ...evidence, viewport: latest.viewport } : evidence;
     },
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live

@@ -447,6 +447,22 @@ extension RunnerTests {
     performWithQuiescenceSkippedIfSupported(target, waits: waits, operation: operation)
   }
 
+  /// Waits, bounded by `interactionIdleTimeoutDefault`, for the app to report idle animations, as
+  /// XCTest does after an event. False when this XCTest has no such wait, so nothing was waited.
+  @MainActor
+  func waitForAppQuiescenceIfSupported(_ target: XCUIApplication) -> Bool {
+    let selector = NSSelectorFromString("_waitForQuiescenceAsPreEvent:")
+    guard target.responds(to: selector) else { return false }
+    typealias WaitForQuiescence = @convention(c) (NSObject, Selector, Bool) -> Void
+    let waitForQuiescence = unsafeBitCast(target.method(for: selector), to: WaitForQuiescence.self)
+    let started = currentUptimeMs()
+    withBoundedInteractionIdleTimeoutIfSupported(target, waits: .preEventSkipped) {
+      waitForQuiescence(target, selector, false)
+    }
+    NSLog("AGENT_DEVICE_RUNNER_APP_QUIESCENCE_WAIT durationMs=%.1f", currentUptimeMs() - started)
+    return true
+  }
+
   // Some apps never report post-gesture quiescence, even after XCTest has synthesized the event.
   @MainActor
   private func performWithQuiescenceSkippedIfSupported(

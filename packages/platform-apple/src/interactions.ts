@@ -31,6 +31,7 @@ import {
 import { isAppleApplicationState } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
 import { runAppleRunnerCommand, runApplePressSeries } from './core/runner-client.ts';
+import { admitsSimulatorHidTap, tapThroughSimulatorHid } from './simulator-hid/client.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
@@ -306,9 +307,16 @@ async function runSingleApplePress(
       runnerOpts,
     );
   }
+  const evidence = options.coordinateTapTextInputEvidence;
+  if (
+    admitsSimulatorHidTap(device, evidence) &&
+    (await tapThroughSimulatorHid(device, evidence, context.signal))
+  ) {
+    return {};
+  }
   return await runAppleRunnerCommand(
     device,
-    iosTapCommand(device, context, point.x, point.y, options.coordinateTapTextInputEvidence),
+    iosTapCommand(device, context, point.x, point.y, evidence),
     runnerOpts,
   );
 }
