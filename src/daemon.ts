@@ -43,7 +43,7 @@ async function runDaemon(): Promise<void> {
       return {
         ...deps,
         nidusCliArgv: async (context) =>
-          await (await import('./nidus-cli-argv.ts')).runNidusCliArgv(context),
+          await (await import('./nidus-cli-argv.ts')).runNidusCliArgv(context, host),
       };
     },
   });
