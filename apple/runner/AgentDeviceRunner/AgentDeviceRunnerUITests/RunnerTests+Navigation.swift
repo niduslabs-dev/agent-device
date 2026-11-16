@@ -457,6 +457,12 @@ extension RunnerTests {
     }
   }
 
+  /// How far, in points, a live frame may sit from its snapshot frame and still be the same frame.
+  /// The two come from different reads, and UIKit can rest a bar a rounding error off a whole
+  /// point (y 62.000000000000014 after a large title bounces back), which the reads then report
+  /// with different last digits. A moving button is off by far more: one pixel is a third of a point.
+  static let navigationBarBackLiveFrameTolerance: CGFloat = 0.01
+
   /// Whether `state` holds the live button. A live frame is in screen points, and a snapshot frame
   /// is in the window's own space, which a placed iPad window starts off the screen origin (#3899).
   static func navigationBarBackState(
@@ -464,9 +470,11 @@ extension RunnerTests {
     holdsButton button: CGRect,
     geometry: SurfaceGeometry
   ) -> Bool {
-    state.backButtonFrames.contains { frame in
+    let tolerance = navigationBarBackLiveFrameTolerance
+    return state.backButtonFrames.contains { frame in
       let origin = geometry.screenPoint(from: SurfacePoint<WindowContentSpace>(frame.origin)).point
-      return CGRect(origin: origin, size: frame.size) == button
+      return abs(origin.x - button.minX) <= tolerance && abs(origin.y - button.minY) <= tolerance
+        && abs(frame.width - button.width) <= tolerance && abs(frame.height - button.height) <= tolerance
     }
   }
 
