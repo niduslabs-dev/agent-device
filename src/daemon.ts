@@ -39,7 +39,12 @@ async function runDaemon(): Promise<void> {
         'composition-loaded',
         reportMarkerFailure,
       );
-      return deps;
+      // Fork-only (Nidus Labs): the native thin client's raw-argv route, loaded on its first use.
+      return {
+        ...deps,
+        nidusCliArgv: async (context) =>
+          await (await import('./nidus-cli-argv.ts')).runNidusCliArgv(context),
+      };
     },
   });
   let exitCode = 0;
