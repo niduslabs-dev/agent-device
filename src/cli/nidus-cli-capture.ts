@@ -1,5 +1,5 @@
-// Fork-only (Nidus Labs): lets the daemon run the Node CLI's own code for a native client and
-// collect exactly what that CLI would have printed.
+// Fork-only (Nidus Labs): lets a long-lived process (the daemon's CLI worker) run the Node CLI's
+// own code for a native client and collect exactly what that CLI would have printed.
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /** One write, in order: `1` is stdout and `2` is stderr. */
@@ -25,7 +25,7 @@ let streamsRouted = false;
 /**
  * Runs `run` as one CLI process would: its `process.stdout`/`process.stderr` writes and `isTTY`
  * reads go to this run only, and its exit ({@link capturedCliExit}) ends it. Other code in the
- * daemon, including the requests this run sends to it, keeps the real streams.
+ * process, and other runs, keep their own streams.
  */
 export async function runCapturedCli(
   streams: CapturedCliStreams,

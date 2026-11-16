@@ -4,32 +4,12 @@ import { listCliCommandNames } from '@agent-device/command-registry/catalog';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { runNidusCliArgv } from './nidus-cli-argv.ts';
 
-function request(
-  baseDir: string,
-  overrides: Partial<{
-    argv: string[];
-    env: Record<string, string>;
-    stderrIsTTY: boolean;
-    cwd: unknown;
-  }> = {},
-) {
-  return {
-    baseDir,
-    request: {
-      session: 'default',
-      command: 'nidus_cli_argv',
-      positionals: [],
-      token: 'token',
-      input: {
-        argv: overrides.argv ?? ['session', 'list'],
-        cwd: (overrides.cwd ?? baseDir) as string,
-        env: overrides.env ?? hostEnv(baseDir),
-        stdoutIsTTY: false,
-        stderrIsTTY: overrides.stderrIsTTY ?? false,
-      },
-    },
-  };
-}
+type Overrides = Partial<{
+  argv: string[];
+  env: Record<string, string>;
+  stderrIsTTY: boolean;
+  cwd: unknown;
+}>;
 
 function hostEnv(baseDir: string): Record<string, string> {
   const env: Record<string, string> = { AGENT_DEVICE_STATE_DIR: baseDir };
@@ -38,11 +18,21 @@ function hostEnv(baseDir: string): Record<string, string> {
   return env;
 }
 
-/** One request, served by a daemon whose host has the same home and temp dir as the client. */
-async function run(baseDir: string, overrides: Parameters<typeof request>[1] = {}) {
-  return await runNidusCliArgv(request(baseDir, overrides), {
-    env: hostEnv(baseDir),
-    cwd: baseDir,
+/** One run in a worker whose host has the same home and temp dir as the client. */
+async function run(baseDir: string, overrides: Overrides = {}) {
+  return await runNidusCliArgv({
+    input: {
+      argv: overrides.argv ?? ['session', 'list'],
+      cwd: overrides.cwd ?? baseDir,
+      env: overrides.env ?? hostEnv(baseDir),
+      stdoutIsTTY: false,
+      stderrIsTTY: overrides.stderrIsTTY ?? false,
+    },
+    baseDir,
+    daemonPid: process.pid,
+    workerHost: { env: hostEnv(baseDir), cwd: baseDir },
+    signal: new AbortController().signal,
+    onDispatch: () => {},
   });
 }
 

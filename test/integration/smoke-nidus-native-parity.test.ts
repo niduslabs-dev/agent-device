@@ -1,10 +1,11 @@
 // Fork-only (Nidus Labs): the native thin client must print exactly what the Node CLI prints.
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
+import { isProcessAlive } from '@agent-device/host-kit/process';
 import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { cleanupDaemonTestState } from './support/daemon-test-cleanup.ts';
 
@@ -78,7 +79,16 @@ function assertSame(label: string, node: Run, native: Run): void {
   assert.equal(masked(native.stderr), masked(node.stderr), `${label}: stderr`);
 }
 
-test('the native client prints what the Node CLI prints', async (t) => {
+type IsolatedDaemon = { env: NodeJS.ProcessEnv; cwd: string; stateDir: string };
+
+/**
+ * Builds the native client and runs `body` against a daemon of its own: an empty home, and a PATH
+ * that holds only node, so no device tool on this host is visible to either client or the daemon.
+ */
+async function withIsolatedDaemon(
+  t: TestContext,
+  body: (daemon: IsolatedDaemon) => Promise<void> | void,
+): Promise<void> {
   if (process.platform !== 'darwin') {
     t.skip('the native client is macOS only');
     return;
@@ -103,7 +113,6 @@ test('the native client prints what the Node CLI prints', async (t) => {
   fs.mkdirSync(home);
   fs.mkdirSync(cwd);
   fs.mkdirSync(bin);
-  // Node alone, so no device tool on this host's PATH is visible to either client or the daemon.
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   const env: NodeJS.ProcessEnv = {
     HOME: home,
@@ -115,11 +124,55 @@ test('the native client prints what the Node CLI prints', async (t) => {
   try {
     const started = run(process.execPath, [NODE_BIN, 'session', 'list'], env, cwd);
     assert.equal(started.exitCode, 0, started.stderr);
+    await body({ env, cwd, stateDir });
+  } finally {
+    await cleanupDaemonTestState(stateDir, null);
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
+}
 
+function assertNativeRoute(daemon: IsolatedDaemon, args: readonly string[], label: string): void {
+  const traced = run(
+    NATIVE_BIN,
+    args,
+    { ...daemon.env, AGENT_DEVICE_NATIVE_TRACE: '1' },
+    daemon.cwd,
+  );
+  assert.match(traced.stderr, /^agent-device-native: native \(/m, `${label}: route`);
+}
+
+function daemonPid(daemon: IsolatedDaemon): number {
+  const record = JSON.parse(fs.readFileSync(path.join(daemon.stateDir, 'daemon.json'), 'utf8'));
+  return record.pid as number;
+}
+
+/** The CLI worker process the daemon `pid` owns, if it has started one. */
+function workerPidOf(pid: number): number | undefined {
+  const table = runCmdSync('/bin/ps', ['-axo', 'pid=,ppid=,command=']).stdout ?? '';
+  for (const line of table.split('\n')) {
+    const [child, parent, ...command] = line.trim().split(/\s+/);
+    if (Number(parent) === pid && command.join(' ').includes('nidus-cli-worker')) {
+      return Number(child);
+    }
+  }
+  return undefined;
+}
+
+async function waitForExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (isProcessAlive(pid)) {
+    if (Date.now() > deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return true;
+}
+
+test('the native client prints what the Node CLI prints', async (t) => {
+  await withIsolatedDaemon(t, (daemon) => {
+    const { env, cwd } = daemon;
     for (const args of NATIVE_CASES) {
       const label = `agent-device ${args.join(' ')}`;
-      const traced = run(NATIVE_BIN, args, { ...env, AGENT_DEVICE_NATIVE_TRACE: '1' }, cwd);
-      assert.match(traced.stderr, /^agent-device-native: native \(/m, `${label}: route`);
+      assertNativeRoute(daemon, args, label);
       assertSame(
         label,
         run(process.execPath, [NODE_BIN, ...args], env, cwd),
@@ -142,8 +195,29 @@ test('the native client prints what the Node CLI prints', async (t) => {
         run(NATIVE_BIN, args, env, cwd),
       );
     }
-  } finally {
-    await cleanupDaemonTestState(stateDir, null);
-    fs.rmSync(scratch, { recursive: true, force: true });
-  }
+  });
+});
+
+test('the CLI worker starts on the first native run, is replaced after a crash, and never outlives its daemon', async (t) => {
+  await withIsolatedDaemon(t, async (daemon) => {
+    const pid = daemonPid(daemon);
+    assert.equal(workerPidOf(pid), undefined, 'no worker before the first native run');
+
+    assertNativeRoute(daemon, ['session', 'list'], 'first run');
+    const worker = workerPidOf(pid);
+    assert.ok(worker, 'the first native run starts the worker');
+    assertNativeRoute(daemon, ['session', 'list'], 'second run');
+    assert.equal(workerPidOf(pid), worker, 'later runs reuse the worker');
+
+    process.kill(worker, 'SIGKILL');
+    assert.ok(await waitForExit(worker, 5_000));
+    assertNativeRoute(daemon, ['session', 'list'], 'run after a worker crash');
+    const replacement = workerPidOf(pid);
+    assert.ok(replacement && replacement !== worker, 'a crashed worker is replaced');
+    assert.equal(daemonPid(daemon), pid, 'the daemon survives its worker');
+
+    // However the daemon dies, the worker sees its channel close and leaves.
+    process.kill(pid, 'SIGKILL');
+    assert.ok(await waitForExit(replacement, 5_000), 'the worker exits with its daemon');
+  });
 });
