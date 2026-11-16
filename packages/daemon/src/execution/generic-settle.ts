@@ -67,7 +67,7 @@ export type GenericSettleObserver = () => Promise<SettleObservation | undefined>
 
 export type GenericSettlePlan = { response: DaemonResponse } | { observe?: GenericSettleObserver };
 
-type GenericSettleContext = {
+export type GenericSettleContext = {
   createCommandSurface: CreateDaemonCommandSurface;
   sessionRef: SessionRef | undefined;
   req: DaemonRequest;
@@ -92,6 +92,19 @@ export async function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
+  return { observe: await planImpliedSettleObservation(params, settle) };
+}
+
+/**
+ * A settle the command owes without `--settle`, for a mutation that redraws the whole UI with no
+ * target to resolve (`settings appearance`, `settings text-size`). It freezes the same baseline and
+ * runs the same best-effort loop as `--settle`. Call it before the mutation and before the ref
+ * frame expires, and run the observer after the mutation returns.
+ */
+export async function planImpliedSettleObservation(
+  params: GenericSettleContext,
+  settle: SettleParams,
+): Promise<GenericSettleObserver> {
   const { presentedSurface: _unverified, ...frame } = surfaceScopedNodes(
     refFrameTree(params.session),
   );
@@ -99,7 +112,7 @@ export async function planGenericSettleObservation(
     frame,
     candidates: [storedTreeBaseline(params.session.snapshot)],
   });
-  return { observe: async () => await observeSettled(params, settle, baseline) };
+  return async () => await observeSettled(params, settle, baseline);
 }
 
 /**
