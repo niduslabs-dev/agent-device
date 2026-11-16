@@ -77,6 +77,27 @@ export async function ensureDaemon(
   });
 }
 
+/**
+ * The cheap first look a request-bound ensure takes before {@link ensureDaemon}: one registration
+ * read and one version and code identity judgment, with no probe connection. Returns the daemon when
+ * that judgment alone says reuse, so the caller's request can go straight to it and serve as the
+ * probe. Returns `undefined` for every other case (no daemon, a mismatch, a newer daemon), and the
+ * caller then runs {@link ensureDaemon}, which probes, replaces, refuses or starts as usual.
+ *
+ * A daemon judged here was never shown to accept connections. The caller must treat a request whose
+ * connection was refused before anything was sent as "not ensured" and run {@link ensureDaemon}.
+ */
+export async function judgeReusableDaemonForRequest(
+  options: EnsureDaemonOptions,
+  host: HostEnvironment,
+): Promise<DaemonInfo | undefined> {
+  const settings = resolveLocalDaemonSettings(options, host);
+  const observed = await observeLocalDaemon(settings, { clientTransportReachability: 'request' });
+  if (observed?.decision.kind !== 'reuse') return undefined;
+  await assertDaemonPolicyMatches(observed.info, settings.paths.baseDir, host);
+  return observed.info;
+}
+
 async function ensureOnce(
   settings: DaemonClientSettings,
   onStart: EnsureDaemonOptions['onStart'],

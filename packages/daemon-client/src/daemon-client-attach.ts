@@ -1,6 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { ensureManagedDaemon } from './daemon-client-lifecycle.ts';
 import { assertDaemonPolicyMatches, observeLocalDaemon } from './daemon-client-startup.ts';
+import type { DaemonInfo } from './daemon-client-metadata.ts';
 import type {
   DaemonClientSettings,
   EnsuredDaemon,
@@ -9,14 +10,22 @@ import type {
 import { daemonBindingMismatchError } from './daemon-client-binding.ts';
 import { daemonIncompatibleError, daemonNotRunningError } from './daemon-lifecycle-errors.ts';
 
-/** Resolves a managed daemon, or observes and verifies the one an attach client may use. */
+/**
+ * Resolves a managed daemon, or observes and verifies the one an attach client may use.
+ *
+ * `judged` is a daemon the same request's ensure has just judged reusable, version, code identity
+ * and policy included. An unpinned attach sends to it as is: a second registration read would repeat
+ * that judgment, process-table read included, on the hot path of every CLI call.
+ */
 export async function connectToDaemon(
   settings: DaemonClientSettings,
   healthRecovery?: RemoteHealthRecovery,
+  judged?: DaemonInfo,
 ): Promise<EnsuredDaemon> {
   if (settings.remoteBaseUrl || settings.daemonLifecycle !== 'attach') {
     return await ensureManagedDaemon(settings, healthRecovery);
   }
+  if (judged && !settings.daemonBinding) return { info: judged, startedByClient: false };
   const stateDir = settings.paths.baseDir;
   const observed = await observeLocalDaemon(settings, { refineUnreachable: true }).catch(
     (error: unknown) => {

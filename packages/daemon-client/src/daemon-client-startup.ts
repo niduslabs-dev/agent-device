@@ -102,8 +102,9 @@ export async function observeLocalDaemon(
     return null;
 
   const decision = await resolveDaemonTakeover(existing, {
-    onClientTransport: () =>
-      canReachReusableDaemon(existing, settings.transportPreference, deadline),
+    onClientTransport: async () =>
+      options.clientTransportReachability === 'request' ||
+      (await canReachReusableDaemon(existing, settings.transportPreference, deadline)),
     onAnyAdvertisedTransport: () => canReachReusableDaemon(existing, 'auto', deadline),
   });
   return { info: existing, decision: await refineReplacement(existing, decision, options) };

@@ -153,6 +153,20 @@ export function isDaemonTransportUnavailableError(error: unknown): boolean {
   );
 }
 
+/**
+ * Whether a local request failed before any byte reached a daemon: the registration names no
+ * endpoint for the transport, or the connection itself failed (`daemonRequestSent: false`). Such a
+ * request ran nowhere, so a caller that sent it to an unprobed daemon may ensure and send it again.
+ */
+export function isDaemonRequestRefusedBeforeSend(error: unknown): boolean {
+  if (isDaemonTransportUnavailableError(error)) return true;
+  return (
+    error instanceof AppError &&
+    error.details?.reason === 'daemon_transport_failure' &&
+    error.details.daemonRequestSent === false
+  );
+}
+
 function daemonEndpointUnavailableError(transport: ResolvedDaemonTransport): AppError {
   return new AppError(
     'COMMAND_FAILED',
