@@ -1,12 +1,18 @@
 import {
+  appearanceSettingPayload,
   parseAppearanceAction,
   parsePermissionAction,
   parsePermissionTarget,
   parseSettingState,
+  type AppearanceSettingPayload,
   type SimctlSettingRequest,
 } from '@agent-device/contracts/settings';
 import { type MobilePermissionTarget } from '@agent-device/contracts/settings-catalog';
-import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  isRequestCanceledError,
+  sessionAppRequiredDetails,
+} from '@agent-device/kernel/errors';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
 
 /** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
@@ -23,7 +29,11 @@ export async function applySimctlSetting(
   }
 }
 
-async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): Promise<void> {
+async function setAppearance({
+  runSimctl,
+  udid,
+  state,
+}: SimctlSettingRequest): Promise<AppearanceSettingPayload> {
   const action = parseAppearanceAction(state);
   let target: 'light' | 'dark';
   if (action === 'toggle') {
@@ -44,6 +54,21 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
     target = action;
   }
   await runSimctl(['ui', udid, 'appearance', target]);
+  return appearanceSettingPayload(target, await readIosAppearance(runSimctl, udid));
+}
+
+/** The appearance `simctl` reports after a write, or undefined when the read fails. */
+async function readIosAppearance(
+  runSimctl: SimctlSettingRequest['runSimctl'],
+  udid: string,
+): Promise<string | undefined> {
+  try {
+    const current = await runSimctl(['ui', udid, 'appearance']);
+    return parseIosAppearance(current.stdout, current.stderr) ?? undefined;
+  } catch (error) {
+    if (error instanceof AppError && !isRequestCanceledError(error)) return undefined;
+    throw error;
+  }
 }
 
 async function setPermission(request: SimctlSettingRequest): Promise<void> {

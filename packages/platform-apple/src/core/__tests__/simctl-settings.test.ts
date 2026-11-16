@@ -63,6 +63,7 @@ test('every simctl argv addresses the udid the runner was given', async () => {
   expect(argvs(runSimctl)).toEqual([
     ['ui', 'SIM-1', 'appearance'],
     ['ui', 'SIM-1', 'appearance', 'dark'],
+    ['ui', 'SIM-1', 'appearance'],
     ['privacy', 'SIM-1', 'revoke', 'photos-add', 'com.example.app'],
     ['location', 'SIM-1', 'set', '1,2'],
   ]);
@@ -77,11 +78,44 @@ test.for([
 
   await applySimctlSetting(request(runSimctl, { state: 'toggle' }));
 
-  expect(argvs(runSimctl)).toEqual([
+  expect(argvs(runSimctl).slice(0, 2)).toEqual([
     ['ui', 'SIM-1', 'appearance'],
     ['ui', 'SIM-1', 'appearance', target],
   ]);
 });
+
+test.for([
+  {
+    readBack: { stdout: 'dark\n', stderr: '' },
+    expected: { appearance: 'dark', verified: true, message: 'Appearance is dark' },
+  },
+  {
+    readBack: { stdout: 'light\n', stderr: '' },
+    expected: {
+      appearance: 'dark',
+      verified: false,
+      observed: 'light',
+      message: 'Appearance dark requested. The device reports light.',
+    },
+  },
+  {
+    readBack: new AppError('COMMAND_FAILED', 'simctl ui failed'),
+    expected: { appearance: 'dark', verified: false, message: 'Appearance dark requested' },
+  },
+])(
+  'appearance dark reports the value read back: $expected.message',
+  async ({ readBack, expected }) => {
+    const runSimctl = recordingRunner([{ stdout: '', stderr: '' }, readBack]);
+
+    const result = await applySimctlSetting(request(runSimctl, { state: 'dark' }));
+
+    expect(argvs(runSimctl)).toEqual([
+      ['ui', 'SIM-1', 'appearance', 'dark'],
+      ['ui', 'SIM-1', 'appearance'],
+    ]);
+    expect(result).toEqual(expected);
+  },
+);
 
 test('appearance toggle refuses a current appearance that is neither light nor dark', async () => {
   const runSimctl = recordingRunner([{ stdout: 'unsupported', stderr: '' }]);

@@ -131,7 +131,7 @@ export const SETTINGS = {
   },
   appearance: {
     forms: [{ kind: 'choice', states: APPEARANCE_ACTIONS }],
-    help: 'Switches to light or dark mode, or toggles it, on Android, Apple simulators, and the macOS host.',
+    help: 'Switches to light or dark mode, or toggles it, on Android, Apple simulators, and the macOS host. Android and Apple simulators read the value back: the answer is "Appearance is dark" when it landed and "Appearance dark requested" when it could not be read or differs.',
   },
   'text-size': {
     forms: [{ kind: 'choice', states: TEXT_SIZE_CATEGORIES }],

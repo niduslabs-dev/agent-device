@@ -64,7 +64,43 @@ export function describeSettingWrite(
 ): string {
   if (setting === 'clear-app-state') return `Cleared user data for ${appBundleId}`;
   if (setting === 'text-size') return `Text size set to ${state}`;
+  if (setting === 'appearance') return `Appearance ${state} requested`;
   return `Updated setting: ${setting}`;
+}
+
+/**
+ * What an appearance write answers with once the owner read the value back. `verified` is true only
+ * when the device reports the requested value. A read that fails or disagrees keeps the write's
+ * success and says the value was requested, because the write itself exited cleanly.
+ */
+export type AppearanceSettingPayload = Readonly<{
+  appearance: 'light' | 'dark';
+  verified: boolean;
+  observed?: string;
+  message: string;
+}>;
+
+/** Builds the appearance write payload from the requested value and the value read back. */
+export function appearanceSettingPayload(
+  requested: 'light' | 'dark',
+  observed: string | undefined,
+): AppearanceSettingPayload {
+  if (observed === requested) {
+    return { appearance: requested, verified: true, message: `Appearance is ${requested}` };
+  }
+  if (observed === undefined) {
+    return {
+      appearance: requested,
+      verified: false,
+      message: describeSettingWrite('appearance', requested, undefined),
+    };
+  }
+  return {
+    appearance: requested,
+    verified: false,
+    observed,
+    message: `Appearance ${requested} requested. The device reports ${observed}.`,
+  };
 }
 
 export type SettingOptions = {
