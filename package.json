@@ -238,6 +238,7 @@
     "apple/snapshot-bridge",
     "apple/fold-helper",
     "apple/simulator-hid",
+    "clients/nidus-native/dist",
     "android/snapshot-helper/dist",
     "!android/snapshot-helper/dist/*.idsig",
     "!android/snapshot-helper/README.md",

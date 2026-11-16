@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Installs or updates the niduslabs-dev/agent-device fork from its GitHub Releases.
 #
-# The package goes into its own npm prefix (never a global install), and ~/.local/bin/agent-device
-# links to it. Put ~/.local/bin before Homebrew on PATH to use the fork; remove the link to fall
-# back to Homebrew's upstream agent-device. Re-running updates to the newest release.
+# The package goes into its own npm prefix (never a global install). ~/.local/bin/agent-device
+# links to the native client inside it, which runs the Node CLI of the same install for whatever it
+# does not handle itself; ~/.local/bin/agent-device-node links to that Node CLI directly. A release
+# without a native client, or a host that cannot run it, gets the Node CLI under both names.
+# Put ~/.local/bin before Homebrew on PATH to use the fork; remove the links to fall back to
+# Homebrew's upstream agent-device. Re-running updates to the newest release.
 #
 # Usage: install-latest.sh [--version vX.Y.Z-nidus.N]
 #
@@ -98,11 +101,35 @@ echo "SHA-256 verified: $actual"
 mkdir -p "$PREFIX" "$BIN_DIR"
 npm install --prefix "$PREFIX" --no-audit --no-fund --omit=dev "$work/$tgz_name"
 
-target="$PREFIX/node_modules/agent-device/bin/agent-device.mjs"
-[ -x "$target" ] || die "installed package has no executable at $target"
-ln -sfn "$target" "$BIN_DIR/agent-device"
+readonly PACKAGE="$PREFIX/node_modules/agent-device"
+readonly NODE_CLI="$PACKAGE/bin/agent-device.mjs"
+readonly NATIVE_CLIENT="$PACKAGE/clients/nidus-native/dist/agent-device-native"
 
-echo "Installed agent-device $("$BIN_DIR/agent-device" --version) at $BIN_DIR/agent-device"
+[ -x "$NODE_CLI" ] || die "installed package has no executable at $NODE_CLI"
+installed_version="$("$NODE_CLI" --version)" || die "the installed Node CLI does not run"
+ln -sfn "$NODE_CLI" "$BIN_DIR/agent-device-node"
+
+# The native client finds its package by walking up from its own real path, so it must stay inside
+# the package and be reached through a link. pnpm pack drops the executable bit of non-bin files.
+client="$NODE_CLI"
+if [ -f "$NATIVE_CLIENT" ]; then
+  chmod 755 "$NATIVE_CLIENT"
+  if [ "$("$NATIVE_CLIENT" --version 2>/dev/null || true)" = "$installed_version" ]; then
+    client="$NATIVE_CLIENT"
+  else
+    echo "Note: the native client does not run on this host. Linking the Node CLI instead." >&2
+  fi
+else
+  echo "Note: $release_tag ships no native client. Linking the Node CLI instead." >&2
+fi
+ln -sfn "$client" "$BIN_DIR/agent-device"
+
+case "$client" in
+  "$NATIVE_CLIENT") kind="native client" ;;
+  *) kind="Node CLI" ;;
+esac
+echo "Installed agent-device $installed_version ($kind) at $BIN_DIR/agent-device"
+echo "Node CLI: $BIN_DIR/agent-device-node"
 resolved="$(command -v agent-device || true)"
 if [ "$resolved" != "$BIN_DIR/agent-device" ]; then
   echo "Note: agent-device on PATH resolves to '${resolved:-nothing}'. Put $BIN_DIR first on PATH." >&2

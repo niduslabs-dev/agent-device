@@ -17,7 +17,7 @@ See `git log upstream/main..main` for the exact list. In short:
 - Faster fills, key events, capture settling and daemon-client startup.
 - Android emulator input (taps, swipes, scrolls, back, home) goes through the emulator's own gRPC
   endpoint instead of the snapshot helper (ADR 0041).
-
+- iOS simulator taps go through the simulator's digitizer instead of XCTest (ADR 0005).
 - A native thin client (below) that runs a command in about 10 ms instead of about 150 ms.
 
 Fork-only files use a `nidus` name so upstream rebases do not conflict:
@@ -35,6 +35,7 @@ by construction.
 
 ```bash
 clients/nidus-native/build.sh                         # swift build -c release, without Homebrew LLVM
+clients/nidus-native/package.sh                       # universal, ad-hoc signed, into dist/ for the package
 clients/nidus-native/.build/release/agent-device-native session list
 ```
 
@@ -93,8 +94,10 @@ git push origin v0.21.39-nidus.1
 ```
 
 The **Nidus release** workflow builds the package on a GitHub-hosted macOS runner, stamps the
-version from the tag (nothing is committed), runs `pnpm pack`, and creates a GitHub Release with
-the `.tgz` and its `.sha256`. To rebuild a failed release, run the workflow by hand with the tag.
+version from the tag (nothing is committed), builds the native client (`package.sh`: universal,
+ad-hoc signed), runs `pnpm pack`, and creates a GitHub Release with the `.tgz` and its `.sha256`.
+The client ships inside the tarball at `clients/nidus-native/dist/agent-device-native`, so one
+checksum covers both and the client always matches its Node CLI. To rebuild a failed release, run the workflow by hand with the tag.
 Never move a pushed tag; cut the next `-nidus.N` instead.
 
 GitHub Actions is enabled for the fork, but every upstream workflow is disabled
@@ -108,13 +111,31 @@ scripts/nidus/install-latest.sh                        # latest release, or upda
 scripts/nidus/install-latest.sh --version v0.21.39-nidus.1
 ```
 
-The script verifies the SHA-256, installs into `~/.local/share/agent-device-fork` with
-`npm install --prefix` (never globally) and links `~/.local/bin/agent-device`. `~/.local/bin`
-must come before Homebrew on `PATH`.
+The script verifies the SHA-256 and installs into `~/.local/share/agent-device-fork` with
+`npm install --prefix` (never globally). It then links two names in `~/.local/bin`, which must come
+before Homebrew on `PATH`:
 
-To uninstall, remove the link; `agent-device` falls back to Homebrew's upstream build:
+- `agent-device` is the native client inside the installed package. It finds that package by
+  walking up from its own real path, so it always falls back to the Node CLI of the same install.
+  Do not copy the binary elsewhere; link to it.
+- `agent-device-node` is the Node CLI itself, for debugging.
+
+A release without a native client, or a host where it does not run, gets the Node CLI under both
+names. The binary needs no Gatekeeper approval: `curl` and `npm` set no quarantine attribute, and
+the ad-hoc signature is all Apple silicon requires.
+
+### Roll back or uninstall
 
 ```bash
-rm ~/.local/bin/agent-device
+# Use the Node CLI again, same release:
+ln -sfn ~/.local/share/agent-device-fork/node_modules/agent-device/bin/agent-device.mjs ~/.local/bin/agent-device
+# Go back to an earlier release (nidus.1 has no native client):
+scripts/nidus/install-latest.sh --version v0.21.39-nidus.1
+# Uninstall; `agent-device` falls back to Homebrew's upstream build:
+agent-device-node daemon stop
+rm ~/.local/bin/agent-device ~/.local/bin/agent-device-node
 rm -rf ~/.local/share/agent-device-fork   # optional
 ```
+
+After a version change, a daemon of the old version may still run. The next command replaces it:
+the native client sees the other version and hands that run to the Node CLI.
