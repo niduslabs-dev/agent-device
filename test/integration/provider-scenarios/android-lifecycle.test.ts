@@ -490,7 +490,12 @@ async function runAndroidAppControlAndObservabilityWorkflow(
 ): Promise<void> {
   const { daemon, selection, spawnedLogcat } = world;
 
-  await client.settings.update({ setting: 'appearance', state: 'dark', ...selection });
+  const appearance = await client.settings.update({
+    setting: 'appearance',
+    state: 'dark',
+    ...selection,
+  });
+  assert.equal(appearance.message, 'Appearance is dark');
   await client.settings.update({
     setting: 'location',
     state: 'set',

@@ -73,6 +73,7 @@ export async function createAndroidSettingsWorld(options?: {
   resetAndroidSnapshotHelperInstallCache();
   const hostAdbGuard = installFakeHostAdbGuard();
   const adbCalls: string[][] = [];
+  let nightMode: 'yes' | 'no' = 'no';
   const textInjectionCalls: AndroidSettingsWorld['textInjectionCalls'] = [];
   const touchInjectionCalls: AndroidSettingsWorld['touchInjectionCalls'] = [];
   let gestureViewportCalls = 0;
@@ -107,6 +108,11 @@ export async function createAndroidSettingsWorld(options?: {
       adbCalls.push(args);
       const override = options?.onAdbExec?.([...args]);
       if (override) return override;
+      const nightModeResult = androidNightModeAdbResult(args, nightMode);
+      if (nightModeResult) {
+        nightMode = nightModeResult.nightMode;
+        return nightModeResult.result;
+      }
       updateAndroidProviderShellState(args, shellState);
       const stateResult = updateAndroidProviderAppState(args, appState);
       if (stateResult) return stateResult;
@@ -444,7 +450,6 @@ function androidScreenshotDemoAdbResult(args: readonly string[]): AndroidAdbResu
 
 function androidSettingsMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
   return (
-    androidAppearanceMutationAdbResult(args) ??
     androidLocationMutationAdbResult(args) ??
     androidFingerprintMutationAdbResult(args) ??
     androidPermissionMutationAdbResult(args) ??
@@ -452,13 +457,20 @@ function androidSettingsMutationAdbResult(args: readonly string[]): AndroidAdbRe
   );
 }
 
-function androidAppearanceMutationAdbResult(args: readonly string[]): AndroidAdbResult | undefined {
-  if (
-    args.length === 5 &&
-    argsStartWith(args, ['shell', 'cmd', 'uimode', 'night']) &&
-    (args[4] === 'yes' || args[4] === 'no')
-  ) {
-    return { stdout: '', stderr: '', exitCode: 0 };
+/** `cmd uimode night [yes|no]`: a write sets the night mode a later read reports. */
+function androidNightModeAdbResult(
+  args: readonly string[],
+  current: 'yes' | 'no',
+): { result: AndroidAdbResult; nightMode: 'yes' | 'no' } | undefined {
+  if (!argsStartWith(args, ['shell', 'cmd', 'uimode', 'night'])) return undefined;
+  if (args.length === 4) {
+    return {
+      result: { stdout: `Night mode: ${current}\n`, stderr: '', exitCode: 0 },
+      nightMode: current,
+    };
+  }
+  if (args.length === 5 && (args[4] === 'yes' || args[4] === 'no')) {
+    return { result: { stdout: '', stderr: '', exitCode: 0 }, nightMode: args[4] };
   }
   return undefined;
 }
