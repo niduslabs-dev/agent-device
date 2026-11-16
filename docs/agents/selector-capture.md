@@ -28,7 +28,6 @@ ADRs 0002, 0004, 0005, 0011, 0014, 0015, and 0040 own their rationale and decisi
   Freshness is short-lived and action-triggered.
   Only route-safe complete observations establish freshness.
 - Post-gesture stabilization runs first.
-  A quiet pair that equals the pre-gesture tree is distrusted only when a read in it comes from an `unproven` producer (ADR 0040).
   When required, Android freshness recovery composes afterward.
   Gesture-like mutations mark stabilization.
   While stabilization is pending, these mutations disable direct iOS selector shortcuts.
