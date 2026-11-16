@@ -169,6 +169,10 @@ async function readDeviceDescription(
   }
 }
 
+/**
+ * A running emulator keeps its AVD name verbatim, the same name `listStoppedAvds` reports and
+ * `emulator -avd` takes, so `devices`, session output and `--device` agree across a boot.
+ */
 async function resolveDeviceName(
   context: AndroidInventoryContext,
   entry: AndroidDeviceEntry,
@@ -176,7 +180,7 @@ async function resolveDeviceName(
   const model = entry.rawModel.replaceAll('_', ' ').trim();
   if (!isAndroidEmulatorSerial(entry.serial)) return model || entry.serial;
   const avdName = await resolveEmulatorAvdName(context, entry.serial);
-  return avdName?.replaceAll('_', ' ') || model || entry.serial;
+  return avdName || model || entry.serial;
 }
 
 async function resolveEmulatorAvdName(
