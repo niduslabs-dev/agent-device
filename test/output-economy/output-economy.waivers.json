@@ -1,1 +1,22 @@
-{}
+{
+  "mcp.snapshot.default.json": {
+    "bytes": { "from": 228, "to": 290 },
+    "reason": "Each snapshot text line ends with its frame (x,y,w,h), and the header names the unit once, so agents get positions without --json."
+  },
+  "snapshot.default.text": {
+    "bytes": { "from": 160, "to": 222 },
+    "reason": "Each snapshot text line ends with its frame (x,y,w,h), and the header names the unit once, so agents get positions without --json."
+  },
+  "snapshot.digest.json": {
+    "bytes": { "from": 214, "to": 310 },
+    "reason": "Each digest ref carries its rect when it has area, so a digest reader can act on coordinates without the full tree."
+  },
+  "workflow.orient.cli.text": {
+    "bytes": { "from": 154, "to": 216 },
+    "reason": "Each snapshot text line ends with its frame (x,y,w,h), and the header names the unit once, so agents get positions without --json."
+  },
+  "workflow.orient.mcp.json": {
+    "bytes": { "from": 228, "to": 290 },
+    "reason": "Each snapshot text line ends with its frame (x,y,w,h), and the header names the unit once, so agents get positions without --json."
+  }
+}

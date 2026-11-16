@@ -9,10 +9,16 @@ const getView = RESPONSE_VIEWS.get;
 
 const SNAPSHOT_DATA: DaemonResponseData = {
   nodes: [
-    { ref: 'e1', hittable: true, label: 'Login' },
+    {
+      ref: 'e1',
+      hittable: true,
+      label: 'Login',
+      rect: { x: 16, y: 380.5, width: 370, height: 52 },
+    },
     { ref: 'e2', hittable: false, label: 'Heading' }, // not hittable → excluded
     { ref: 'e3', hittable: true, interactionBlocked: 'covered', label: 'Hidden' }, // occluded → excluded
-    { ref: 'e4', hittable: true, value: 'from-value' }, // label falls back to value
+    // label falls back to value; a rect without area is left out
+    { ref: 'e4', hittable: true, value: 'from-value', rect: { x: 0, y: 0, width: 0, height: 0 } },
   ],
   truncated: false,
   visibility: { partial: false, visibleNodeCount: 4, totalNodeCount: 4, reasons: [] },
@@ -25,7 +31,7 @@ test('digest collapses the node tree to count + actionable refs + cheap signals'
   expect(digest).toEqual({
     nodeCount: 4,
     refs: [
-      { ref: 'e1', label: 'Login' },
+      { ref: 'e1', label: 'Login', rect: { x: 16, y: 380.5, width: 370, height: 52 } },
       { ref: 'e4', label: 'from-value' },
     ],
     truncated: false,

@@ -668,21 +668,21 @@ function androidTextFieldSnapshot(field: Record<string, unknown>): string {
 test('formatSnapshotText prints the placeholder of an Android text field with no label or value', () => {
   assert.match(
     androidTextFieldSnapshot({ placeholder: 'Search', hintShowing: false }),
-    /^@e1 \[text-field\] \[editable\] \[placeholder:"Search"\]$/m,
+    /^@e1 \[text-field\] \[editable\] \[placeholder:"Search"\] \(16,120,358,56\)$/m,
   );
   assert.match(
     androidTextFieldSnapshot({ identifier: 'search_field', placeholder: 'Search' }),
-    /^@e1 \[text-field\] "search_field" \[editable\] \[placeholder:"Search"\]$/m,
+    /^@e1 \[text-field\] "search_field" \[editable\] \[placeholder:"Search"\] \(16,120,358,56\)$/m,
   );
 });
 
 test('formatSnapshotText omits the placeholder of an Android text field with a label or value', () => {
   assert.match(
     androidTextFieldSnapshot({ value: 'coffee', placeholder: 'Search' }),
-    /^@e1 \[text-field\] "coffee" \[editable\]$/m,
+    /^@e1 \[text-field\] "coffee" \[editable\] \(16,120,358,56\)$/m,
   );
   assert.match(
     androidTextFieldSnapshot({ label: 'Search', placeholder: 'Search', hintShowing: true }),
-    /^@e1 \[text-field\] "Search" \[editable\]$/m,
+    /^@e1 \[text-field\] "Search" \[editable\] \(16,120,358,56\)$/m,
   );
 });

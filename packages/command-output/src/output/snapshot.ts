@@ -15,10 +15,13 @@ import {
 import {
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
+  type SnapshotBackend,
 } from '@agent-device/contracts/snapshot';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { buildMobileSnapshotPresentation } from '@agent-device/capture-kit/mobile-snapshot-semantics';
 import { pinnedRefText } from '../output-common.ts';
+import { deriveChildTextLabels } from './snapshot-derived-labels.ts';
+import { collapseKeyboardLines } from './snapshot-keyboard-summary.ts';
 
 type SnapshotTextOptions = {
   raw?: boolean;
@@ -61,17 +64,18 @@ export function formatSnapshotText(
           nodes.length,
           helperPresentation.filteredCount,
         );
-  const header = formatSnapshotHeader(nodes.length, visibility, truncated);
+  const header = formatSnapshotHeader(nodes.length, visibility, truncated, backend);
   if (nodes.length === 0) {
     return `${prefix}${header}\n${noticesBlock}`;
   }
   if (options.raw) {
     return `${prefix}${header}\n${noticesBlock}${formatRawSnapshotLines(nodes)}\n`;
   }
-  if (options.flatten) {
-    return `${prefix}${header}\n${scopedRefsLine}${noticesBlock}${formatFlattenedSnapshotLines(displayedNodes, pin)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
-  }
-  return `${prefix}${header}\n${scopedRefsLine}${noticesBlock}${formatStructuredSnapshotLines(displayedNodes, pin)}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
+  const lineOptions = presentedLineOptions(displayedNodes, nodes);
+  const linesText = options.flatten
+    ? formatFlattenedSnapshotLines(displayedNodes, nodes, lineOptions, pin)
+    : formatStructuredSnapshotLines(displayedNodes, nodes, lineOptions, pin);
+  return `${prefix}${header}\n${scopedRefsLine}${noticesBlock}${linesText}${formatSnapshotSummaryBlock(visiblePresentation)}\n`;
 }
 
 function readUnchangedSnapshot(data: Record<string, unknown>): SnapshotUnchanged | null {
@@ -131,8 +135,10 @@ function formatSnapshotHeader(
   nodeCount: number,
   visibility: SnapshotVisibility | null,
   truncated: boolean,
+  backend: SnapshotBackend | undefined,
 ): string {
-  const suffix = truncated ? ' (truncated)' : '';
+  const unit = snapshotFrameUnit(backend);
+  const suffix = `${truncated ? ' (truncated)' : ''}${unit ? `; frames (x,y,w,h) in ${unit}` : ''}`;
   if (!visibility?.partial) {
     return `Snapshot: ${nodeCount} nodes${suffix}`;
   }
@@ -140,6 +146,42 @@ function formatSnapshotHeader(
     return `Snapshot: ${visibility.visibleNodeCount} visible nodes (${visibility.totalNodeCount} total)${suffix}`;
   }
   return `Snapshot: ${visibility.visibleNodeCount} visible nodes${suffix}`;
+}
+
+/**
+ * The unit node rects use on each backend. Apple backends report points; Android, HarmonyOS, Linux
+ * and web report pixels. The text snapshot prints rects as reported and names the unit once.
+ */
+function snapshotFrameUnit(backend: SnapshotBackend | undefined): string | undefined {
+  switch (backend) {
+    case 'xctest':
+    case 'macos-helper':
+      return 'points';
+    case 'android':
+    case 'harmonyos-arkui':
+    case 'linux-atspi':
+    case 'web':
+      return 'px';
+    case undefined:
+      return undefined;
+  }
+}
+
+type PresentedLineOptions = {
+  summarizeTextSurfaces: true;
+  frames: true;
+  derivedLabels: ReadonlyMap<number, string>;
+};
+
+function presentedLineOptions(
+  displayedNodes: SnapshotNode[],
+  treeNodes: SnapshotNode[],
+): PresentedLineOptions {
+  return {
+    summarizeTextSurfaces: true,
+    frames: true,
+    derivedLabels: deriveChildTextLabels(displayedNodes, treeNodes),
+  };
 }
 
 function formatRawSnapshotLines(nodes: SnapshotNode[]): string {
@@ -164,13 +206,23 @@ function scopedRefsDisclosure(pin: number | undefined): string {
   return pin === undefined ? '' : `Refs generation: ${pin}\n`;
 }
 
-function formatFlattenedSnapshotLines(nodes: SnapshotNode[], pin?: number): string {
-  return buildFlattenedSnapshotDisplayLines(nodes, pin).join('\n');
+function formatFlattenedSnapshotLines(
+  nodes: SnapshotNode[],
+  treeNodes: SnapshotNode[],
+  lineOptions: PresentedLineOptions,
+  pin?: number,
+): string {
+  return buildFlattenedSnapshotDisplayLines(nodes, treeNodes, lineOptions, pin).join('\n');
 }
 
-function formatStructuredSnapshotLines(nodes: SnapshotNode[], pin?: number): string {
+function formatStructuredSnapshotLines(
+  nodes: SnapshotNode[],
+  treeNodes: SnapshotNode[],
+  lineOptions: PresentedLineOptions,
+  pin?: number,
+): string {
   return renderSnapshotDisplayLines(
-    buildSnapshotDisplayLines(nodes, { summarizeTextSurfaces: true }),
+    collapseKeyboardLines(buildSnapshotDisplayLines(nodes, lineOptions), treeNodes, lineOptions),
     pin,
   ).join('\n');
 }
@@ -382,15 +434,21 @@ function isDescendantOfRenderedLine(
   return false;
 }
 
-function buildFlattenedSnapshotDisplayLines(nodes: SnapshotNode[], pin?: number): string[] {
+function buildFlattenedSnapshotDisplayLines(
+  nodes: SnapshotNode[],
+  treeNodes: SnapshotNode[],
+  lineOptions: PresentedLineOptions,
+  pin?: number,
+): string[] {
+  const flatLines = buildSnapshotDisplayLines(nodes, lineOptions).map((line) => ({
+    ...line,
+    depth: 0,
+    text: formatSnapshotLine(line.node, 0, false, line.type, lineOptions),
+  }));
   // Flattened output has no subtree boundary to defer below-hints past.
-  return buildSnapshotDisplayLines(nodes, { summarizeTextSurfaces: true }).flatMap((line) => [
-    pinnedSnapshotLineText(
-      formatSnapshotLine(line.node, 0, false, line.type, { summarizeTextSurfaces: true }),
-      line.node,
-      pin,
-    ),
-    ...readHiddenContentHintLines({ ...line, depth: 0 }),
+  return collapseKeyboardLines(flatLines, treeNodes, lineOptions).flatMap((line) => [
+    pinnedSnapshotLineText(line.text, line.node, pin),
+    ...readHiddenContentHintLines(line),
   ]);
 }
 

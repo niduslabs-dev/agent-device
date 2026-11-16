@@ -87,6 +87,9 @@ and disclosure behavior ([#2682](https://github.com/callstack/agent-device/issue
 - If your target only appears in an off-screen summary, run `scroll <direction> --until <selector>` to stop on it, or `scroll <direction> --settle` to get the diff with fresh refs. See [Interactions](/docs/commands#interactions).
 - When agent-device knows which container holds the hidden content, it shows the summary inside that scroll or list container, for example `[content above scroll-area hidden]` or `[content below list hidden]`.
 - In a regular (non-`--raw`) snapshot, a listed element whose frame has no area is marked `[unmeasured]`: nothing confirms it is on screen. On iOS, a Flutter scroll view keeps its scrolled-out content this way. If the element is inside scrollable content, run `scroll <direction> --until <selector>` before acting on it.
+- Each line of the regular text output ends with the element's frame as `(x,y,w,h)`, rounded to one decimal. The `Snapshot:` header names the unit once: `points` on iOS, tvOS and macOS, `px` on Android, HarmonyOS, Linux and web. An element whose frame has no area prints no frame. `--json` is unchanged.
+- A software keyboard prints as one line that lists its labeled keys, such as `@e41 [keyboard] keys: q w e … return (0,590,402,226)`. Keys with no label, and keys with no area, are left out. The key refs stay in the snapshot, so target a key by selector, for example `press 'label="return"'`.
+- An unlabeled button or cell shows its first child text as `[text:"..."]`, such as `@e15 [button] [text:"Wallpapers"]`. The element itself has no label, so `label=` does not match that text.
 - Add `-s "<label>"` (or `-s @ref`) to limit output to one part of the screen. See [Scope a snapshot](#scope-a-snapshot).
 - Add `-d <depth>` when you only need the upper layers of the hierarchy.
 - If `snapshot -i -d <n>` reports no interactive elements at that depth, retry once without `-d` instead of taking more shallow snapshots.
@@ -103,16 +106,16 @@ and disclosure behavior ([#2682](https://github.com/callstack/agent-device/issue
 ```bash
 agent-device snapshot -i
 # Output:
-# Snapshot: 9 visible nodes (14 total)
-# @e1 [application] "Contacts"
-#   @e2 [window]
-#     @e3 [other]
-#   @e4 [other] "Lists"
-#     @e5 [navigation-bar] "Lists"
-#       @e6 [button] "Lists"
-#       @e7 [text] "Contacts"
-#     @e8 [other] "John Doe"
-#       @e9 [other] "John Doe"
+# Snapshot: 9 visible nodes (14 total); frames (x,y,w,h) in points
+# @e1 [application] "Contacts" (0,0,402,874)
+#   @e2 [window] (0,0,402,874)
+#     @e3 [other] (0,0,402,874)
+#   @e4 [other] "Lists" (0,62,402,812)
+#     @e5 [navigation-bar] "Lists" (0,62,402,54)
+#       @e6 [button] "Lists" (16,68,62,44)
+#       @e7 [text] "Contacts" (160,74,82,22)
+#     @e8 [other] "John Doe" (0,180,402,44)
+#       @e9 [other] "John Doe" (16,180,370,44)
 # [off-screen below] 2 interactive items: "All Contacts", "New List"
 ```
 

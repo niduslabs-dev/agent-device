@@ -1,7 +1,8 @@
 import { isSystemScrollIndicatorLabel } from '@agent-device/kernel/scroll-indicator';
 import { formatRole } from '@agent-device/kernel/snapshot';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ElementMatchCandidateDetails } from '@agent-device/kernel/errors';
+import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import {
   buildTextPreview,
   describeTextSurface,
@@ -21,6 +22,16 @@ type SnapshotDisplayLine = {
 
 type SnapshotLineFormatOptions = {
   summarizeTextSurfaces?: boolean;
+  /**
+   * End each line with the node's frame as `(x,y,w,h)` in the snapshot's own units. A node whose
+   * frame has no area prints none: `[unmeasured]` already says nothing confirms its position.
+   */
+  frames?: boolean;
+  /**
+   * Text shown for an unlabeled node, keyed by node index, rendered as `[text:"..."]` rather than
+   * as the quoted label: it is read from the node's descendants, so `label=` does not match it.
+   */
+  derivedLabels?: ReadonlyMap<number, string>;
 };
 
 export function buildSnapshotDisplayLines(
@@ -68,13 +79,35 @@ export function formatSnapshotLine(
   if (!label && (node.inheritsLabel === true || node.inheritsIdentifier === true)) {
     metadata.push('same label as parent');
   }
+  const derivedLabel = options.derivedLabels?.get(node.index);
+  if (derivedLabel && !trimText(node.label) && !trimText(node.value)) {
+    metadata.unshift(`text:"${escapePreviewText(collapseControlCharacters(derivedLabel))}"`);
+  }
   const metadataText = metadata.map((entry) => ` [${entry}]`).join('');
   const textPart = label ? ` "${label}"` : '';
   const actionsText = formatCustomActions(node);
+  const frameText = options.frames && node.rect ? formatSnapshotFrameSuffix(node.rect) : '';
   if (hiddenGroup) {
-    return `${indent}${ref} [${type}]${metadataText}${actionsText}`.trimEnd();
+    return `${indent}${ref} [${type}]${metadataText}${actionsText}${frameText}`.trimEnd();
   }
-  return `${indent}${ref} [${type}]${textPart}${metadataText}${actionsText}`.trimEnd();
+  return `${indent}${ref} [${type}]${textPart}${metadataText}${actionsText}${frameText}`.trimEnd();
+}
+
+/**
+ * The compact frame a text snapshot line ends with: ` (x,y,w,h)`, each value rounded to at most one
+ * decimal. Empty for a rect without area, which the line already marks `[unmeasured]`.
+ */
+export function formatSnapshotFrameSuffix(rect: Rect): string {
+  if (!isPositiveFiniteRect(rect)) return '';
+  const values = [rect.x, rect.y, rect.width, rect.height].map(formatFrameNumber);
+  return ` (${values.join(',')})`;
+}
+
+const FRAME_DECIMAL_SCALE = 10;
+
+function formatFrameNumber(value: number): string {
+  const rounded = Math.round(value * FRAME_DECIMAL_SCALE) / FRAME_DECIMAL_SCALE;
+  return String(Object.is(rounded, -0) ? 0 : rounded);
 }
 
 /**
