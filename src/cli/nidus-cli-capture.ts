@@ -67,6 +67,12 @@ export function capturedCliExit(code: number): Promise<never> | undefined {
   return new Promise<never>(() => {});
 }
 
+/** Writes straight into the enclosing captured run, as the run's `process` stream `fd` would. */
+export function writeCapturedCli(fd: 1 | 2, text: string): void {
+  const scope = captureStorage.getStore();
+  if (scope && !scope.settled) scope.output.push([fd, text]);
+}
+
 /** Hands a captured run back to the client's own Node CLI. Never settles. */
 export function refuseCapturedCli(reason: string): Promise<never> {
   const scope = captureStorage.getStore();

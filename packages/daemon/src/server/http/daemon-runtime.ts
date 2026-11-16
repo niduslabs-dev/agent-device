@@ -47,7 +47,7 @@ import {
   type ShutdownReport,
   type StartupRollback,
 } from './server-shutdown.ts';
-import type { DaemonInvokeFn, DaemonRequest } from '../../core/daemon-request.ts';
+import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import {
   createDaemonIdleReap,
@@ -57,7 +57,7 @@ import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemo
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
-import { routeNidusCliArgv } from '../nidus-cli-argv-route.ts';
+import { mountNidusCliArgv } from '../nidus-cli-argv-route.ts';
 import { processOwnsActiveDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
@@ -504,22 +504,14 @@ async function startDaemonRuntimeOnHost(
   });
 
   // Fork-only (Nidus Labs): the native client's raw-argv route, answered on the socket only.
-  const socketRequests = new WeakSet<DaemonRequest>();
-  const handleSocketRequest: DaemonInvokeFn = async (req) => {
-    socketRequests.add(req);
-    return await handleRequest(req);
-  };
-  const routeRequest = deps.nidusCliArgv
-    ? routeNidusCliArgv(dispatchRequest, {
-        token,
-        baseDir,
-        runner: deps.nidusCliArgv,
-        admits: (req) => socketRequests.has(req),
-      })
-    : dispatchRequest;
+  const nidusRoute = mountNidusCliArgv(dispatchRequest, {
+    token,
+    baseDir,
+    runner: deps.nidusCliArgv,
+  });
   const handleRequest: DaemonInvokeFn = lifecycleAdmission.admit(async (req) => {
     idleReap.cancel();
-    const dispatch = runtimeState.run(() => routeRequest(req));
+    const dispatch = runtimeState.run(() => nidusRoute.route(req));
     inFlightRequests.add(dispatch);
     try {
       return await dispatch;
@@ -680,7 +672,7 @@ async function startDaemonRuntimeOnHost(
             ),
     },
     rollback,
-    handleSocketRequest,
+    nidusRoute.fromSocket(handleRequest),
   );
   recordStartupPhase('listening');
   publishDaemonInfo(socketPort, httpPort);

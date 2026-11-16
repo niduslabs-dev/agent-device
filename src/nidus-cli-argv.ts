@@ -22,6 +22,7 @@ import {
   capturedCliExit,
   refuseCapturedCli,
   runCapturedCli,
+  writeCapturedCli,
   type CapturedCliOutcome,
 } from './cli/nidus-cli-capture.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
@@ -181,12 +182,8 @@ async function runEntryLikeBin(
     {
       bundledVersion:
         typeof __AGENT_DEVICE_VERSION__ === 'string' ? __AGENT_DEVICE_VERSION__ : undefined,
-      stdout: (text) => {
-        process.stdout.write(text);
-      },
-      stderr: (text) => {
-        process.stderr.write(text);
-      },
+      stdout: (text) => writeCapturedCli(1, text),
+      stderr: (text) => writeCapturedCli(2, text),
     },
   );
 }
@@ -201,14 +198,8 @@ function admissionRefusal(
   baseDir: string,
   daemonHost: HostEnvironment,
 ): string | undefined {
-  // An interactive stderr turns on the upgrade notifier, which reads the process environment.
-  if (input.stderrIsTTY) return 'stderr-tty';
-  // Diagnostics files and temporary artifacts resolve from the daemon process's home and temp dir.
-  if (input.env.HOME !== daemonHost.env.HOME) return 'home';
-  if (input.env.TMPDIR !== daemonHost.env.TMPDIR) return 'tmpdir';
-  // A policy mismatch makes the Node CLI replace the daemon.
-  if (input.env.AGENT_DEVICE_DAEMON_POLICY !== undefined) return 'daemon-policy';
-
+  const hostRefusal = hostAdmissionRefusal(input, daemonHost);
+  if (hostRefusal) return hostRefusal;
   let parsed: ReturnType<typeof resolveCliOptions>;
   try {
     parsed = resolveCliOptions(input.argv, { cwd: input.cwd, env: input.env });
@@ -217,9 +208,34 @@ function admissionRefusal(
     return undefined;
   }
   const { command, flags } = parsed;
-  if (flags.help || flags.version || command === 'help' || command === null) return undefined;
+  if (flags.help || flags.version || command === null || command === 'help') return undefined;
   if (!isKnownCliCommandName(command)) return undefined;
   if (!NATIVE_CLI_COMMANDS.has(command)) return `command:${command}`;
+  return flagAdmissionRefusal(parsed, input, baseDir);
+}
+
+/** What the client's process differs in from the daemon's, in ways the CLI run would read. */
+function hostAdmissionRefusal(
+  input: NidusCliArgvInput,
+  daemonHost: HostEnvironment,
+): string | undefined {
+  // An interactive stderr turns on the upgrade notifier, which reads the process environment.
+  if (input.stderrIsTTY) return 'stderr-tty';
+  // Diagnostics files and temporary artifacts resolve from the daemon process's home and temp dir.
+  if (input.env.HOME !== daemonHost.env.HOME) return 'home';
+  if (input.env.TMPDIR !== daemonHost.env.TMPDIR) return 'tmpdir';
+  // A policy mismatch makes the Node CLI replace the daemon.
+  if (input.env.AGENT_DEVICE_DAEMON_POLICY !== undefined) return 'daemon-policy';
+  return undefined;
+}
+
+/** Parsed options that make a native command need the client's process or another daemon. */
+function flagAdmissionRefusal(
+  parsed: ReturnType<typeof resolveCliOptions>,
+  input: NidusCliArgvInput,
+  baseDir: string,
+): string | undefined {
+  const { flags } = parsed;
   // `--debug` tails the daemon log on a timer that a captured exit would never stop.
   if (flags.verbose) return 'debug';
   if (flags.textStdin) return 'stdin';
