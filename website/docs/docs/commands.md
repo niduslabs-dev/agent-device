@@ -82,6 +82,8 @@ Select a device:
 
 - `--platform apple` is an alias for the Apple backend (`ios`, `tvOS`, `macOS`). Add `--target mobile|tv|desktop` to `--platform` to choose phone/tablet, TV, or desktop targets.
 - A command that needs one device fails with `AMBIGUOUS_MATCH` and lists the candidates when you pass no `--device`, `--udid`, or `--serial` and several are equally preferred, such as two booted emulators. Virtual devices are preferred over physical ones and booted over offline ones first, and commands inside a session use the session's device. `devices` still lists everything.
+- `--device` matches a name without case and treats `_` and spaces alike, so `dev_android36` and `dev android36` select the same AVD. Android emulators show their AVD name as written.
+- `boot`, `open`, `install`, `reinstall`, `shutdown`, `apps`, and `capabilities` accept a stopped AVD. Another command naming a stopped AVD fails with `DEVICE_NOT_FOUND`, `error.details.reason` `device_not_booted`, and a hint with the exact `agent-device boot --device "<name>" --platform android` command. It never boots the AVD itself.
 - Commands without `--session` use an implicit session scoped to your worktree and the selected platform. For named sessions, `AGENT_DEVICE_SESSION`, and `--session-lock reject|strip`, see [Sessions](/docs/sessions).
 
 Device claims and the daemon:
@@ -816,7 +818,7 @@ Platform support:
 
 - iOS `settings` works on simulators only.
 - macOS supports only `settings appearance <light|dark|toggle>` and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>`.
-- `settings appearance` sets macOS appearance, iOS simulator appearance, or Android night mode.
+- `settings appearance` sets macOS appearance, iOS simulator appearance, or Android night mode. On Android and iOS simulators it reads the value back. It answers `Appearance is dark` when the device reports the new value, and `Appearance dark requested` when the read fails or differs. JSON output has `appearance`, `verified`, and `observed` when the device reports another value.
 - `settings location set <lat> <lon>` sets coordinates on iOS simulators and Android emulators.
 - A target that does not serve a setting refuses it with `UNSUPPORTED_OPERATION` and `error.details.reason` (for example `unsupported-platform-leaf`) before anything changes. A request that names an app the change cannot take is refused first, with `INVALID_ARGS` and `setting_app_not_consumed`. `settings --help` describes where each setting runs.
 - On an iOS simulator, `settings wifi` and `settings airplane` wait for screenshots and other status bar writes. The request timeout includes this wait (90 seconds for a standalone CLI request). Once the write starts, its status bar command has a separate 10-second timeout. A request or write that times out may already have changed the bar; check the bar before relying on it. Cancelling while still queued guarantees nothing was written.
