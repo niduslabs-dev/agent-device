@@ -1,6 +1,7 @@
-// Fork-only (Nidus Labs): runs a native client's raw CLI argv inside the daemon, through the Node
-// CLI's own entry, parser, client and formatters, so what it prints is byte-identical by
-// construction. See `docs/nidus-fork.md`.
+// Fork-only (Nidus Labs): runs a native client's raw CLI argv through the Node CLI's own entry,
+// parser, client and formatters, so what it prints is byte-identical by construction. It runs in
+// the daemon's CLI worker process (`nidus-cli-worker.ts`), never in the daemon itself. See
+// `docs/nidus-fork.md`.
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -9,29 +10,27 @@ import {
   readRegisteredDaemon,
   type DaemonInfo,
 } from '@agent-device/daemon-client';
-import type { NidusCliArgvContext } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { runEntry } from './cli/entry.ts';
+import { runEntry } from './entry.ts';
 import {
   capturedCliExit,
   refuseCapturedCli,
   runCapturedCli,
   writeCapturedCli,
   type CapturedCliOutcome,
-} from './cli/nidus-cli-capture.ts';
-import { resolveCliOptions } from './cli/resolve-cli-options.ts';
+} from './nidus-cli-capture.ts';
+import { resolveCliOptions } from './resolve-cli-options.ts';
 
 declare const __AGENT_DEVICE_VERSION__: string;
 
 /**
- * Commands whose whole CLI run is daemon requests plus formatting, so it behaves the same inside
- * the daemon as in the client's process. Every other command, including one upstream adds later,
+ * Commands whose whole CLI run is daemon requests plus formatting, so it behaves the same in the
+ * daemon's worker as in the client's process. Every other command, including one upstream adds later,
  * runs in the client's own Node CLI. Those need the client's process:
  *
  * - `auth`, `connect`, `connection`, `disconnect`, `proxy`: remote state, sign-in and tunnels.
@@ -107,7 +106,23 @@ type NidusCliArgvInput = Readonly<{
   stderrIsTTY: boolean;
 }>;
 
-let ownRegistration: Promise<DaemonInfo | null> | undefined;
+/** One run as the worker receives it: the client's request input and what the daemon adds. */
+export type NidusCliArgvRun = Readonly<{
+  /** The `input` of the client's `nidus_cli_argv` request, unvalidated. */
+  input: unknown;
+  /** The resolved state dir of the daemon that owns this worker. */
+  baseDir: string;
+  /** That daemon's process id; the run reaches no other daemon. */
+  daemonPid: number;
+  /** The worker's own host, which is the daemon's: the client's home and temp dir must match it. */
+  workerHost: HostEnvironment;
+  /** Aborts the run's daemon requests, as the client disconnecting would. */
+  signal: AbortSignal;
+  /** Called just before a request of the run leaves for the daemon. */
+  onDispatch: () => void;
+}>;
+
+let ownerRegistration: Promise<DaemonInfo | null> | undefined;
 
 /**
  * Answers one `nidus_cli_argv` request: `{ outcome: 'exit', exitCode, output }`, where `output` is
@@ -115,29 +130,27 @@ let ownRegistration: Promise<DaemonInfo | null> | undefined;
  * the run needs the client's own process. A client-only answer is given only before the run sent
  * anything to a daemon, so the client may run the Node CLI on the same argv.
  */
-export async function runNidusCliArgv(
-  context: NidusCliArgvContext,
-  daemonHost: HostEnvironment,
-): Promise<DaemonResponse> {
+export async function runNidusCliArgv(run: NidusCliArgvRun): Promise<DaemonResponse> {
   let input: NidusCliArgvInput;
   try {
-    input = readInput(context.request.input);
+    input = readInput(run.input);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-  const refusal = admissionRefusal(input, context.baseDir, daemonHost);
+  const refusal = admissionRefusal(input, run.baseDir, run.workerHost);
   if (refusal) return answer({ kind: 'client-only', reason: refusal });
-  const daemon = await readOwnRegistration(context.baseDir);
+  const daemon = await readOwnerRegistration(run.baseDir, run.daemonPid);
   if (!daemon) return answer({ kind: 'client-only', reason: 'daemon-registration' });
 
   const host: HostEnvironment = { env: { ...input.env }, cwd: input.cwd };
-  const transport = createNidusAttachedTransport(createDaemonTransport(host), {
-    host,
-    daemon,
-    stateDir: context.baseDir,
-    signal: getRequestSignal(context.request.meta?.requestId),
-    refuse: refuseCapturedCli,
-  });
+  const send = createDaemonTransport(host);
+  const transport = createNidusAttachedTransport(
+    async (req, options) => {
+      run.onDispatch();
+      return await send(req, options);
+    },
+    { host, daemon, stateDir: run.baseDir, signal: run.signal, refuse: refuseCapturedCli },
+  );
   const outcome = await runCapturedCli(
     { stdoutIsTTY: input.stdoutIsTTY, stderrIsTTY: input.stderrIsTTY },
     async () => {
@@ -161,11 +174,11 @@ async function runEntryLikeBin(
   await runEntry(
     argv,
     {
-      help: () => import('./commands/schema/cli-help.ts'),
+      help: () => import('../commands/schema/cli-help.ts'),
       cli: async () => {
         const [{ runCliProcess }, { runCli }] = await Promise.all([
-          import('./cli/process-entry.ts'),
-          import('./cli.ts'),
+          import('./process-entry.ts'),
+          import('../cli.ts'),
         ]);
         return {
           runCliProcess: (cliArgv) =>
@@ -177,7 +190,7 @@ async function runEntryLikeBin(
       },
       mcp: async () => ({ runAgentDeviceMcpServer: () => refuseCapturedCli('command:mcp') }),
       version: () => import('@agent-device/host-kit/version'),
-      processExit: () => import('./cli/process-exit.ts'),
+      processExit: () => import('./process-exit.ts'),
     },
     {
       bundledVersion:
@@ -189,16 +202,16 @@ async function runEntryLikeBin(
 }
 
 /**
- * Why this run must stay in the client's process, or undefined when the daemon can run it. Each
- * rule names something the Node CLI reads from its own process or does there, which a run inside
- * the daemon would read or do differently.
+ * Why this run must stay in the client's process, or undefined when the worker can run it. Each
+ * rule names something the Node CLI reads from its own process or does there, which a run in the
+ * worker would read or do differently.
  */
 function admissionRefusal(
   input: NidusCliArgvInput,
   baseDir: string,
-  daemonHost: HostEnvironment,
+  workerHost: HostEnvironment,
 ): string | undefined {
-  const hostRefusal = hostAdmissionRefusal(input, daemonHost);
+  const hostRefusal = hostAdmissionRefusal(input, workerHost);
   if (hostRefusal) return hostRefusal;
   let parsed: ReturnType<typeof resolveCliOptions>;
   try {
@@ -214,16 +227,16 @@ function admissionRefusal(
   return flagAdmissionRefusal(parsed, input, baseDir);
 }
 
-/** What the client's process differs in from the daemon's, in ways the CLI run would read. */
+/** What the client's process differs in from the worker's, in ways the CLI run would read. */
 function hostAdmissionRefusal(
   input: NidusCliArgvInput,
-  daemonHost: HostEnvironment,
+  workerHost: HostEnvironment,
 ): string | undefined {
   // An interactive stderr turns on the upgrade notifier, which reads the process environment.
   if (input.stderrIsTTY) return 'stderr-tty';
-  // Diagnostics files and temporary artifacts resolve from the daemon process's home and temp dir.
-  if (input.env.HOME !== daemonHost.env.HOME) return 'home';
-  if (input.env.TMPDIR !== daemonHost.env.TMPDIR) return 'tmpdir';
+  // Diagnostics files and temporary artifacts resolve from the worker's home and temp dir, the daemon's.
+  if (input.env.HOME !== workerHost.env.HOME) return 'home';
+  if (input.env.TMPDIR !== workerHost.env.TMPDIR) return 'tmpdir';
   // A policy mismatch makes the Node CLI replace the daemon.
   if (input.env.AGENT_DEVICE_DAEMON_POLICY !== undefined) return 'daemon-policy';
   return undefined;
@@ -251,13 +264,16 @@ function flagAdmissionRefusal(
   return undefined;
 }
 
-async function readOwnRegistration(baseDir: string): Promise<DaemonInfo | null> {
-  ownRegistration ??= readRegisteredDaemon(resolveDaemonPaths(baseDir))
-    .then((info) => (info && info.pid === process.pid ? info : null))
+async function readOwnerRegistration(
+  baseDir: string,
+  daemonPid: number,
+): Promise<DaemonInfo | null> {
+  ownerRegistration ??= readRegisteredDaemon(resolveDaemonPaths(baseDir))
+    .then((info) => (info && info.pid === daemonPid ? info : null))
     .catch(() => null);
-  const info = await ownRegistration;
+  const info = await ownerRegistration;
   // A registration not yet published is read again on the next request.
-  if (!info) ownRegistration = undefined;
+  if (!info) ownerRegistration = undefined;
   return info;
 }
 

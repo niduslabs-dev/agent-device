@@ -18,9 +18,15 @@
  * `packages/daemon-client/src/` root — keep reading the path, not this declaration.
  */
 export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
-  // Fork-only (Nidus Labs): `src/nidus-cli-argv.ts` is the daemon executable's run of `src/cli.ts`
-  // for the native client, so it sits with both executables.
-  '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts', 'src/host.ts', 'src/nidus-cli-argv.ts'],
+  // Fork-only (Nidus Labs): `src/nidus-cli-worker-host.ts` is the daemon executable's own handle
+  // on its CLI worker process, loaded only by `src/daemon.ts`.
+  '(root)': [
+    'src/bin.ts',
+    'src/cli.ts',
+    'src/daemon.ts',
+    'src/host.ts',
+    'src/nidus-cli-worker-host.ts',
+  ],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
   // If `src/io.ts` serves `agent-device/io`, keep its root zone.

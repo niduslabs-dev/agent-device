@@ -28,9 +28,10 @@ Fork-only files use a `nidus` name so upstream rebases do not conflict:
 
 `clients/nidus-native/` is a Swift client (macOS 15+, no dependencies). It does not parse or
 render anything itself. It sends the raw argv, its cwd and its environment to the running daemon
-as a `nidus_cli_argv` request. The daemon runs the Node CLI's own entry, parser, client and
-formatters on it (`src/nidus-cli-argv.ts`) and answers with every stdout and stderr write in
-order plus the exit code. The output is the Node CLI's by construction.
+as a `nidus_cli_argv` request. The daemon hands the run to its CLI worker process, which runs the
+Node CLI's own entry, parser, client and formatters on it (`src/cli/nidus-cli-argv.ts`). The
+answer is every stdout and stderr write in order plus the exit code. The output is the Node CLI's
+by construction.
 
 ```bash
 clients/nidus-native/build.sh                         # swift build -c release, without Homebrew LLVM
@@ -44,7 +45,7 @@ The client finds the agent-device tree by walking up from its own path, or from
   (another version, other code, a policy, a dead or foreign lock owner, no socket port);
 - stderr is a terminal, a remote daemon or a daemon policy is set in the environment;
 - the daemon hands the run back as client-only. Each CLI command is classified in
-  `src/nidus-cli-argv.ts`, and a unit test fails until a new upstream command is classified.
+  `src/cli/nidus-cli-argv.ts`, and a unit test fails until a new upstream command is classified.
   Client-only runs include remote connections and auth, `daemon`, `install`, `replay`, `test`,
   `record`, `web`, `cdp`, `mcp`, `--debug`, `--text-stdin`, and a config that names another state
   dir.
@@ -58,7 +59,28 @@ the request was sent, it reports an error instead of rerunning a command that ma
 - `AGENT_DEVICE_NATIVE_NODE` names the node binary to fall back to.
 
 `test/integration/smoke-nidus-native-parity.test.ts` runs device-free commands through both
-clients and requires byte-identical output. `clients/nidus-native/bench.py` measures both.
+clients and requires byte-identical output, and checks the worker's start, replacement and exit.
+`clients/nidus-native/bench.py` measures both clients.
+
+### The CLI worker
+
+The daemon never loads the CLI's code. It spawns one worker (`src/cli/nidus-cli-worker.ts`,
+handled by `src/nidus-cli-worker-host.ts`) and talks to it over a Node IPC channel. The worker
+holds no device state: each request of a run goes back to the daemon over its socket.
+
+- **Start:** on the first `nidus_cli_argv` request, not at daemon start. That first run costs
+  about what a Node CLI run costs.
+- **Life:** as long as the daemon. It idles at about 70 MB.
+- **Stop:** the daemon stops it when the daemon closes for any reason (idle exit after 5 minutes
+  without sessions or requests, `daemon stop`, replacement). If the daemon dies abruptly, the
+  worker sees the channel close and exits, so none is orphaned.
+- **Crash:** a crash in CLI code ends the worker, not the daemon. A run that had sent nothing to
+  the daemon is handed back to the client, which runs the Node CLI. A run that had sent a request
+  ends as a failed command, because it may have acted. The next run starts a new worker.
+- **Rebuild:** a worker whose code changed on disk hands its next run back and retires, and the
+  run after that starts a fresh one.
+- **Cancel:** when the client goes away mid-command, the daemon tells the worker, which aborts the
+  run's requests the way a killed Node CLI would.
 
 ## Releasing
 

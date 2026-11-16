@@ -7,6 +7,7 @@ import {
   resolveDaemonStartupPhasesPath,
 } from '@agent-device/daemon-contracts/daemon-startup-phases';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { NidusCliWorkerHost } from './nidus-cli-worker-host.ts';
 
 // A refused marker append goes to stderr, which the launcher redirects into the daemon log.
 const reportMarkerFailure = (error: unknown): void => {
@@ -30,6 +31,7 @@ recordDaemonStartupMarker(ownPhasesPath, 'modules-loaded', reportMarkerFailure);
 // calls it before it acquires the registration, so startup order is unchanged, and the eager
 // closure of this entry stays exactly the operational server's (ADR 0019).
 async function runDaemon(): Promise<void> {
+  let nidusCliWorker: NidusCliWorkerHost | undefined;
   const runtime = await startDaemonRuntime({
     host,
     composeDeps: async (input) => {
@@ -39,11 +41,16 @@ async function runDaemon(): Promise<void> {
         'composition-loaded',
         reportMarkerFailure,
       );
-      // Fork-only (Nidus Labs): the native thin client's raw-argv route, loaded on its first use.
+      // Fork-only (Nidus Labs): the native thin client's raw-argv route. Its CLI worker process
+      // starts on the first such request.
       return {
         ...deps,
-        nidusCliArgv: async (context) =>
-          await (await import('./nidus-cli-argv.ts')).runNidusCliArgv(context, host),
+        nidusCliArgv: async (context) => {
+          nidusCliWorker ??= (await import('./nidus-cli-worker-host.ts')).createNidusCliWorkerHost(
+            host,
+          );
+          return await nidusCliWorker.run(context);
+        },
       };
     },
   });
@@ -69,6 +76,7 @@ async function runDaemon(): Promise<void> {
   if ((await reportDaemonClose({ closed: runtime.closed, stderr: process.stderr })).failed) {
     exitCode = 1;
   }
+  nidusCliWorker?.stop();
   process.exit(exitCode);
 }
 
