@@ -58,7 +58,7 @@ test.each([
         candidate.osVersion,
       ]),
       [
-        ['emulator-5554', 'Pixel 9 Pro XL', true, 'sdk_gphone16k_arm64', '17'],
+        ['emulator-5554', 'Pixel_9_Pro_XL', true, 'sdk_gphone16k_arm64', '17'],
         ...(includesStoppedAvd
           ? [['Living_Room_TV', 'Living_Room_TV', false, undefined, undefined] as const]
           : []),
