@@ -79,6 +79,7 @@ export function serializeSnapshotResult(result: CaptureSnapshotResult): Record<s
   return {
     nodes: result.nodes,
     ...(result.truncated === undefined ? {} : { truncated: result.truncated }),
+    ...(result.backend ? { backend: result.backend } : {}),
     ...(result.appName ? { appName: result.appName } : {}),
     ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
     ...(result.visibility ? { visibility: result.visibility } : {}),

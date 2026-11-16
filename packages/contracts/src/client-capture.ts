@@ -16,6 +16,7 @@ import type {
 import type { ScriptDeliveryFailure } from '@agent-device/kernel/contracts';
 import type { ScreenshotResultData } from './snapshot-types.ts';
 import type { PostGestureOutcome } from './snapshot-model.ts';
+import type { SnapshotBackend } from './snapshot-producers.ts';
 import type {
   AgentDeviceIdentifiers,
   AgentDeviceRequestOverrides,
@@ -53,6 +54,11 @@ export type CaptureSnapshotResult = {
   nodes: SnapshotNode[];
   /** Present only when the capture owner establishes whether the tree was truncated. */
   truncated?: boolean;
+  /**
+   * The channel the tree arrived on. Node rects are in points on `xctest` and `macos-helper`, and in
+   * px on every other backend. Absent when the capture carried no provenance.
+   */
+  backend?: SnapshotBackend;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;

@@ -49,7 +49,7 @@ settled after 480ms: +2 -0 (~11 unchanged)
 // for it appears anywhere in the output.
 export const OFFSCREEN_TARGET_SNAPSHOT_SAMPLE = {
   command: 'agent-device snapshot -i',
-  output: `Snapshot: 8 visible nodes (12 total)
+  output: `Snapshot: 8 visible nodes (12 total); frames (x,y,w,h) in points
 @e1 [application] "Preferences" (0,0,390,800)
 @e2 [window] (0,0,390,800)
 @e3 [collection] (0,60,390,740)
@@ -167,7 +167,7 @@ Warning: The session is open, but the initial interactive snapshot failed (COMMA
 // control. Coordinates remain the last resort.
 export const MERGED_CARD_ACTIONS_SAMPLE = {
   command: 'agent-device snapshot -i --actions',
-  output: `Snapshot: 4 nodes
+  output: `Snapshot: 4 nodes; frames (x,y,w,h) in points
 @e1 [application] "Bluesky" (0,0,390,844)
 @e2 [window] (0,0,390,844)
 @e3 [collection] (0,60,390,700)

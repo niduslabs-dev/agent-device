@@ -11,7 +11,10 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { isSameSnapshotPresentation } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
+import {
+  snapshotProducerFacts,
+  type SnapshotBackend,
+} from '@agent-device/contracts/snapshot-producers';
 import type {
   PresentedSurface,
   SnapshotKeyboardBandFact,
@@ -54,6 +57,12 @@ import {
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];
   truncated?: boolean;
+  /**
+   * The channel the tree arrived on. Text output reads it to name the unit the node rects are in
+   * (points on Apple, px elsewhere) and to choose the mobile or full-tree presentation. Absent when
+   * the capture carried no provenance.
+   */
+  backend?: SnapshotBackend;
   appName?: string;
   appBundleId?: string;
   visibility?: SnapshotVisibility;
@@ -112,6 +121,7 @@ export const snapshotCommand: RuntimeCommand<
   return copySnapshotClickabilityEvidence(capture.snapshot, {
     nodes: capture.snapshot.nodes,
     ...(truncated === undefined ? {} : { truncated }),
+    ...(capture.snapshot.backend ? { backend: capture.snapshot.backend } : {}),
     visibility: buildSnapshotVisibility({
       nodes: capture.snapshot.nodes,
       backend: capture.snapshot.backend,
