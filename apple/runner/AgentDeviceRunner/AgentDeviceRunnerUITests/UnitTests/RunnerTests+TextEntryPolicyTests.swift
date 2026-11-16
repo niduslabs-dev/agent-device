@@ -123,6 +123,20 @@ extension RunnerTests {
     }
   }
 
+  // Select all clears a focused field whose value reads wherever its caret is, so the caret tap
+  // waits until delete bursts need it. A field without focus, or with a value that does not read,
+  // still gets the tap first.
+  func testTextClearDefersTheCaretTapOnlyForAFocusedReadableFieldOrReusedFocus() {
+#if os(iOS)
+    XCTAssertTrue(Self.textClearDefersCaretTap(reusesCurrentFocus: false, valueIsReadable: true, hasKeyboardFocus: true))
+#else
+    XCTAssertFalse(Self.textClearDefersCaretTap(reusesCurrentFocus: false, valueIsReadable: true, hasKeyboardFocus: true))
+#endif
+    XCTAssertFalse(Self.textClearDefersCaretTap(reusesCurrentFocus: false, valueIsReadable: true, hasKeyboardFocus: false))
+    XCTAssertFalse(Self.textClearDefersCaretTap(reusesCurrentFocus: false, valueIsReadable: false, hasKeyboardFocus: true))
+    XCTAssertTrue(Self.textClearDefersCaretTap(reusesCurrentFocus: true, valueIsReadable: false, hasKeyboardFocus: false))
+  }
+
   // A clear burst covers a short value whole and caps a long one, which the clear then
   // finishes in more bursts (#3851).
   func testTextClearBurstCoversShortValuesAndCapsLongOnes() {

@@ -416,7 +416,11 @@ extension RunnerTests {
     if existing?.isEmpty == true {
       return
     }
-    let defersCaretTap = reader.target.reusesCurrentFocus
+    let defersCaretTap = Self.textClearDefersCaretTap(
+      reusesCurrentFocus: reader.target.reusesCurrentFocus,
+      valueIsReadable: existing != nil,
+      hasKeyboardFocus: input.snapshot.map { snapshotHasKeyboardFocus($0) } == true
+    )
     var valueLength = normalizedElementText(input.attributes.value).count
 #if os(iOS)
     // A masked value cannot aim the caret tap, which lands at the field's right edge, where an app
@@ -519,6 +523,19 @@ extension RunnerTests {
       }
       valueLength = remaining.count
     }
+  }
+
+  /// Whether the clear skips its caret tap before select all, and taps only if delete bursts must
+  /// follow. Select all reaches the whole value wherever the caret is, so the tap matters only for
+  /// focus and for the bursts. A field that already holds keyboard focus with a readable value needs
+  /// neither before select all; an XCTest tap there cost about 400 ms on an iPhone 18 Pro simulator.
+  /// Off iOS there is no select-all pass, so only a reused focus defers the tap.
+  static func textClearDefersCaretTap(reusesCurrentFocus: Bool, valueIsReadable: Bool, hasKeyboardFocus: Bool) -> Bool {
+#if os(iOS)
+    return reusesCurrentFocus || (valueIsReadable && hasKeyboardFocus)
+#else
+    return reusesCurrentFocus
+#endif
   }
 
   /// Extra deletes past a value's length, for whitespace its normalized read trimmed.
