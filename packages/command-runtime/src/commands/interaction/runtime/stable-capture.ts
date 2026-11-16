@@ -91,6 +91,8 @@ export type StableCaptureLoopResult = {
   lastCapture?: CapturedSnapshot;
   /** A capture threw; the run ended there, without a verdict. */
   failure?: { error: unknown };
+  /** The run ended unsettled because the caller's `settleGate` rejected the last capture. */
+  settleGateHeld?: true;
 };
 
 export async function runStableCaptureLoop(
@@ -110,6 +112,12 @@ export async function runStableCaptureLoop(
      * captures in its presentation, so the settled tree and the baseline share one view (#4486).
      */
     broadTransitionBaseline?: SurfaceScopedNodes;
+    /**
+     * A capture this rejects cannot settle the run, however long it stays quiet: the loop keeps
+     * polling until a capture passes and then holds the quiet window, or the budget runs out and the
+     * result says `settleGateHeld`.
+     */
+    settleGate?: (snapshot: SnapshotState) => boolean;
   },
 ): Promise<StableCaptureLoopResult> {
   const { timeoutMs } = params;
@@ -137,6 +145,7 @@ export async function runStableCaptureLoop(
   const pacing = createStableCapturePacing(start);
   let captures = 0;
   let lastCapture: CapturedSnapshot | undefined;
+  let gateHeld = false;
   const result = (
     settled: boolean,
     stalled: boolean,
@@ -149,6 +158,7 @@ export async function runStableCaptureLoop(
     nodeCount: pacing.lastNodeCount,
     quietMs,
     lastCapture,
+    ...(!settled && gateHeld ? { settleGateHeld: true as const } : {}),
   });
   const unfinished = (read: Exclude<StableCaptureRead, { kind: 'captured' }>) => ({
     ...result(false, read.kind === 'stalled', now(runtime) - start),
@@ -200,9 +210,19 @@ export async function runStableCaptureLoop(
       privateAxRecoveryBudgetReset = true;
       deadlineMs = recovered.deadlineMs;
     }
+    gateHeld = params.settleGate?.(capture.snapshot) === false;
     const step = recovered
       ? { settled: false, delayMs: recovered.delayMs }
-      : pacing.observe({ signal, nodeCount, nowMs, requiredQuietMs, pollMs, deadlineMs, captures });
+      : pacing.observe({
+          signal,
+          nodeCount,
+          nowMs,
+          requiredQuietMs,
+          pollMs,
+          deadlineMs,
+          captures,
+          held: gateHeld,
+        });
     if (step.settled) return result(true, false, nowMs - start);
     if (step.delayMs <= 0) break;
     await sleep(runtime, step.delayMs);
@@ -297,6 +317,8 @@ function createStableCapturePacing(start: number) {
       pollMs: number;
       deadlineMs: number;
       captures: number;
+      /** The caller's settle gate rejected this capture: a held quiet window polls on, unsettled. */
+      held?: boolean;
     }): { settled: boolean; delayMs: number } {
       if (!stableCaptureSignalsEqual(lastSignal, params.signal)) {
         // The UI is still moving: the quiet window restarts from this capture.
@@ -304,7 +326,11 @@ function createStableCapturePacing(start: number) {
         lastNodeCount = params.nodeCount;
         quietSinceMs = params.nowMs;
       } else if (params.captures >= 2 && params.nowMs - quietSinceMs >= params.requiredQuietMs) {
-        return { settled: true, delayMs: 0 };
+        if (!params.held) return { settled: true, delayMs: 0 };
+        return {
+          settled: false,
+          delayMs: Math.min(params.pollMs, params.deadlineMs - params.nowMs - 1),
+        };
       }
       return {
         settled: false,

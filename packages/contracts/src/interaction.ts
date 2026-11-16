@@ -315,12 +315,21 @@ export type FindReadResult =
   /** #1625: the read-only inspection surface — every match, never a tap. */
   | { kind: 'list'; matches: Array<{ ref?: string; node: SnapshotNode }> };
 
+/**
+ * Why a settle ended unsettled, when the loop can name it. `tree-sparser-than-baseline`: the action
+ * redraws the same screen in place, and every quiet capture held far fewer meaningful nodes than the
+ * screen had before the change, so the screen was still redrawing when the budget ran out.
+ */
+export type SettleUnsettledReason = 'tree-sparser-than-baseline';
+
 export type SettleObservation = {
   settled: boolean;
   waitedMs: number;
   captures: number;
   quietMs: number;
   timeoutMs: number;
+  /** Present only on `settled: false`, when the loop knows why it did not settle. */
+  reason?: SettleUnsettledReason;
   /**
    * The session's snapshot generation after the settled tree became the stored
    * snapshot (#1076 versioned refs). Attached by the daemon response layer
