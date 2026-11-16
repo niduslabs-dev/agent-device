@@ -298,6 +298,35 @@ test('scrollAndroid accepts sub-frame public durations at the Android planner mi
   );
 });
 
+test('scrollAndroid without a duration pans for 120 ms and eases the finger to rest before it lifts', async () => {
+  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 2400 }),
+      touch: async (request) => {
+        touchCalls.push(request);
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await scrollAndroid(ANDROID_EMULATOR, 'down'),
+  );
+
+  assert.equal(touchCalls.length, 1);
+  const touch = touchCalls[0]!;
+  assert.equal(touch.durationMs, 120);
+  assert.equal(touch.pointers[0]!.samples.at(-1)!.offsetMs, 120);
+  const samples = touch.pointers[0]!.samples;
+  const steps = samples
+    .slice(1)
+    .map((sample, index) => Math.abs(sample.point.y - samples[index]!.point.y));
+  assert.ok(steps.at(-1)! < Math.max(...steps) / 2);
+  // A default duration is the caller's choice only when named, so the response does not echo it.
+  assert.equal(result.durationMs, undefined);
+});
+
 test.each([undefined, 'inertial'] as const)(
   'scrollAndroid preserves path and duration with %s release',
   async (releaseBehavior) => {
