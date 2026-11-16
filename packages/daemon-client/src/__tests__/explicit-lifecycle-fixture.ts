@@ -28,6 +28,8 @@ export type ScriptedDaemon = {
   port: number;
   rpcCommands: string[];
   rpcRequests: Record<string, any>[];
+  /** Every request in arrival order, as `METHOD path`, so a test can see a probe before an RPC. */
+  arrivals: string[];
 };
 
 /**
@@ -71,7 +73,9 @@ export async function startScriptedDaemon(
 ): Promise<ScriptedDaemon> {
   const rpcCommands: string[] = [];
   const rpcRequests: Record<string, any>[] = [];
+  const arrivals: string[] = [];
   const server = http.createServer((req, res) => {
+    arrivals.push(`${req.method} ${req.url}`);
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200);
       res.end('ok');
@@ -95,7 +99,7 @@ export async function startScriptedDaemon(
       res.end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, result }), () => options.afterRpc?.());
     });
   });
-  return { server, port: await listenOnLoopback(server), rpcCommands, rpcRequests };
+  return { server, port: await listenOnLoopback(server), rpcCommands, rpcRequests, arrivals };
 }
 
 /** A socket-only stand-in: one JSON line in, the scripted response out. */

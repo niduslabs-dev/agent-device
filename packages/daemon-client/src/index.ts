@@ -111,6 +111,7 @@ async function sendToDaemonOnHost(
           requestTimeoutMs === undefined
             ? undefined
             : { budgetMs: requestTimeoutMs, signal: options.signal },
+          options.judgedDaemon,
         ),
       {
         requestId,

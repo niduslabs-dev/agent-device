@@ -226,16 +226,21 @@ test('a registered daemon that answers nothing is replaced and reported as unrea
   await closeLoopbackServer(closed.server);
   const { child } = await registerDaemon(paths, { httpPort: closed.port });
   launchesFreshDaemonAt(spawn, paths, fresh.port);
-  const { transport } = recordingTransport();
   const replaced: string[] = [];
-  const ensuring = withEnsuredDaemon(transport, {
+  // The real transport: the registration says reuse, so the request is sent unprobed, its
+  // connection is refused, and only that refusal sends ensuring down the probing path.
+  const ensuring = createEnsuredDaemonTransport({
     onReplaced: (event) => replaced.push(`${event.reason}:${event.previous.pid}`),
   });
 
   try {
-    await ensuring(request('devices', { stateDir, daemonTransport: 'http' }));
+    assert.deepEqual(await ensuring(request('devices', { stateDir, daemonTransport: 'http' })), {
+      ok: true,
+      data: {},
+    });
 
     assert.deepEqual(replaced, [`unreachable:${child.pid}`]);
+    assert.deepEqual(fresh.rpcCommands, ['devices'], 'the request ran once, on the replacement');
   } finally {
     await closeLoopbackServer(fresh.server);
   }
@@ -288,6 +293,7 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
   const secondEnsuring = createEnsuredDaemonTransport({ host: secondHost });
   const flags = { stateDir, daemonTransport: 'http' };
   const ensure = vi.spyOn(ensureModule, 'ensureDaemon');
+  const judge = vi.spyOn(ensureModule, 'judgeReusableDaemonForRequest');
 
   try {
     const responses = await Promise.all([
@@ -305,11 +311,61 @@ test('concurrent first requests share one ensure through the CLI and MCP transpo
       ok: true,
       data: { via: 'fresh' },
     });
-    assert.equal(ensure.mock.calls.length, 2, 'a separate transport ensures again');
-    assert.equal(ensure.mock.calls[1]?.[1], secondHost);
+    assert.equal(judge.mock.calls.length, 2, 'a separate transport ensures again');
+    assert.equal(judge.mock.calls[1]?.[1], secondHost);
+    assert.equal(ensure.mock.calls.length, 1, 'the running daemon needed no full ensure');
     assert.equal(spawn.mock.calls.length, 1, 'both transports reuse one daemon');
   } finally {
     await closeLoopbackServer(fresh.server);
+  }
+});
+
+test('a reusable daemon gets the request on its first connection, with no probe before it', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const running = await startScriptedDaemon(okResult({ via: 'running' }));
+  await registerDaemon(paths, { httpPort: running.port });
+  const ensure = vi.spyOn(ensureModule, 'ensureDaemon');
+  const ensuring = createEnsuredDaemonTransport();
+
+  try {
+    assert.deepEqual(await ensuring(request('devices', { stateDir, daemonTransport: 'http' })), {
+      ok: true,
+      data: { via: 'running' },
+    });
+
+    assert.deepEqual(running.arrivals, ['POST /rpc']);
+    assert.equal(ensure.mock.calls.length, 0, 'no probing ensure ran');
+    assert.equal(spawn.mock.calls.length, 0);
+  } finally {
+    await closeLoopbackServer(running.server);
+  }
+});
+
+test('a request the daemon fails after it was sent is not sent again', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const { stateDir, paths } = stateDirAndPaths();
+  const running = await startScriptedDaemon(okResult({}));
+  await registerDaemon(paths, { httpPort: running.port });
+  let sends = 0;
+  const transport: typeof sendToDaemon = async () => {
+    sends += 1;
+    throw new AppError('COMMAND_FAILED', 'Failed to communicate with daemon', {
+      reason: 'daemon_transport_failure',
+      daemonRequestSent: true,
+    });
+  };
+  const ensuring = withEnsuredDaemon(transport);
+
+  try {
+    await assert.rejects(
+      ensuring(request('devices', { stateDir, daemonTransport: 'http' })),
+      (error: unknown) =>
+        error instanceof AppError && error.details?.reason === 'daemon_transport_failure',
+    );
+    assert.equal(sends, 1);
+  } finally {
+    await closeLoopbackServer(running.server);
   }
 });
 

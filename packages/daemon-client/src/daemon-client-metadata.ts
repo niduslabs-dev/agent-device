@@ -63,6 +63,13 @@ export type DaemonObservationOptions = {
   deadline?: number;
   waitForLiveStartup?: boolean;
   refineUnreachable?: boolean;
+  /**
+   * `request`: the caller's own request is the reachability probe. A daemon whose version and code
+   * match is judged reusable without opening a probe connection first, and the caller must fall
+   * back to a probing ensure when that request's connection is refused before anything was sent.
+   * `probe`, the default, opens a connection before it calls the daemon reusable.
+   */
+  clientTransportReachability?: 'probe' | 'request';
 };
 
 export type LocalDaemonObservation = {
