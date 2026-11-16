@@ -2,7 +2,11 @@ import type { Rect, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device
 import type { SnapshotState } from '@agent-device/contracts/snapshot-model';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
-import type { PostGestureSurfaceReading } from '@agent-device/capture-kit/post-gesture-stability';
+import type {
+  PostGestureReadFreshness,
+  PostGestureSurfaceReading,
+} from '@agent-device/capture-kit/post-gesture-stability';
+import { snapshotProducerFacts } from '@agent-device/contracts/snapshot-producers';
 import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { InteractionSurfaceEntry } from './session-state.ts';
@@ -38,6 +42,18 @@ export function snapshotSurfaceComparisonKey(
   snapshot: SnapshotState | undefined,
 ): string | undefined {
   return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
+}
+
+/**
+ * Whether this capture's producer re-queries the live app on every read (ADR 0040). A capture
+ * without a producer, or with one this host does not list, is unproven.
+ */
+export function snapshotPostGestureReadFreshness(
+  snapshot: SnapshotState | undefined,
+): PostGestureReadFreshness {
+  const producer = snapshot?.producer;
+  if (producer === undefined) return 'unproven';
+  return snapshotProducerFacts(producer)?.postGestureRead === 'live' ? 'live' : 'unproven';
 }
 
 export function areInteractionSurfaceSignaturesStable(

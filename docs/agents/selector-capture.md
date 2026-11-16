@@ -2,7 +2,7 @@
 
 Before changes to selector capture, polling, snapshot caching, or interaction fast paths, read this.
 These requirements apply across routes.
-ADRs 0002, 0004, 0005, 0011, 0014, and 0015 own their rationale and decisions.
+ADRs 0002, 0004, 0005, 0011, 0014, 0015, and 0040 own their rationale and decisions.
 
 - Direct iOS selectors are a narrow fast path for simple one-term selectors.
   While post-gesture stabilization is pending, they are disabled.
@@ -28,6 +28,7 @@ ADRs 0002, 0004, 0005, 0011, 0014, and 0015 own their rationale and decisions.
   Freshness is short-lived and action-triggered.
   Only route-safe complete observations establish freshness.
 - Post-gesture stabilization runs first.
+  A quiet pair that equals the pre-gesture tree is distrusted only when a read in it comes from an `unproven` producer (ADR 0040).
   When required, Android freshness recovery composes afterward.
   Gesture-like mutations mark stabilization.
   While stabilization is pending, these mutations disable direct iOS selector shortcuts.

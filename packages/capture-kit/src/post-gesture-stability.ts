@@ -29,7 +29,8 @@ const POST_GESTURE_STABILITY_SCHEDULE: ObservationSchedule = {
 /**
  * Defect 2 (#1542): a bounded extra budget used ONLY when a quiet signature
  * match (two consecutive polls agree) still equals the pre-gesture baseline on
- * the Apple synthesized-gesture lane. XCTest's AX tree isn't proactively
+ * the Apple synthesized-gesture lane, and the pair came from a producer whose
+ * reads are not proven live (ADR 0040). XCTest's AX tree isn't proactively
  * resynced by a synthesized touch, so it can serve a stale-but-internally-
  * consistent read that two polls agree on without the screen having moved.
  *
@@ -66,7 +67,16 @@ export type PostGestureSurfaceReading<S> = Readonly<{
   comparisonKey: string | undefined;
   /** The keyboard fact the producer published with this reading; absent when it published none. */
   keyboard?: SnapshotKeyboardBandFact | undefined;
+  /**
+   * `live` when the producer re-queries the app on every read, so a baseline match cannot be a
+   * cached tree a synthesized touch failed to resync. Absent means unproven: the reading earns no
+   * exemption from baseline distrust (ADR 0040).
+   */
+  readFreshness?: PostGestureReadFreshness | undefined;
 }>;
+
+/** Whether a reading's producer re-queries the live app on every read (ADR 0040). */
+export type PostGestureReadFreshness = 'live' | 'unproven';
 
 /**
  * What the loop compares a quiet pair against, tagged by provenance. Only `pre-action` — read
@@ -176,6 +186,11 @@ function postGestureOutcome(
  * outright. `'ambiguous'` evidence (no comparable content) falls through to `trust`, same as
  * `'changed'` — only a genuine "still equals the pre-gesture baseline" read keeps the loop
  * distrustful, and only until the bounded cap expires.
+ *
+ * A quiet pair whose reads are both `live` accepts the baseline match at once: the stale cached
+ * tree the cap waits out cannot come from such a producer, and the quiet window itself already
+ * proved the surface held still for one poll interval (ADR 0040). The no-effect claim still needs
+ * full-surface corroboration downstream.
  */
 export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(params: {
   baseline: PostGestureBaseline<S> | undefined;
@@ -192,6 +207,9 @@ export function decidePostGestureStabilityVerdict<S extends readonly unknown[]>(
   }
   if (params.classifyBaselineEvidence(baseline, quiet) !== 'unchanged') {
     return { verdict: 'trust' };
+  }
+  if (quiet.readFreshness === 'live') {
+    return { verdict: 'accept-stale', preActionBaseline: baseline };
   }
   return elapsedMs < distrustCapMs
     ? { verdict: 'distrust' }
@@ -268,9 +286,12 @@ export async function runPostGestureStabilityLoop<T, S extends readonly unknown[
         };
         return { kind: 'continue' };
       }
+      // Both reads of the quiet pair must be live: one unproven read can be the cached tree.
+      const quietFreshness: PostGestureReadFreshness =
+        previous.readFreshness === 'live' && current.readFreshness === 'live' ? 'live' : 'unproven';
       const decision = decidePostGestureStabilityVerdict({
         baseline,
-        quiet: current,
+        quiet: { ...current, readFreshness: quietFreshness },
         elapsedMs,
         distrustCapMs: STABILIZATION_DISTRUST_DEADLINE_MS,
         classifyBaselineEvidence: hooks.classifyBaselineEvidence,

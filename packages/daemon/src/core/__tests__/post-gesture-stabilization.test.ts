@@ -892,3 +892,102 @@ test('capturePostGestureStabilizedResult clears the pending record when a captur
   assert.equal(captureCount, 2);
   assert.equal(pendingSurfaceStabilization(session), undefined);
 });
+
+// --- ADR 0040: a live producer's baseline match settles at the first quiet pair ---
+
+type ProducerOverride = Parameters<typeof makeSnapshotState>[1];
+
+const BRIDGE_PRODUCER = { backend: 'xctest', producer: 'simulator-ax-bridge' } as const;
+const RUNNER_PRODUCER = { backend: 'xctest', producer: 'apple-runner' } as const;
+
+/** Runs the loop over a scripted capture sequence; the last entry repeats once the script ends. */
+async function stabilizeScriptedScroll(params: {
+  baseline: ReturnType<typeof makeSnapshotState>;
+  reads: ReturnType<typeof makeSnapshotState>[];
+}) {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  session.snapshot = params.baseline;
+  markPostGestureStabilization(session, 'scroll', ['up']);
+  const startedAt = Date.now();
+  let index = 0;
+  const capture = vi.fn(async () => {
+    const read = params.reads[Math.min(index, params.reads.length - 1)];
+    index += 1;
+    return read as ReturnType<typeof makeSnapshotState>;
+  });
+
+  const resultPromise = withDiagnosticsScope({}, async () => {
+    const result = await capturePostGestureStabilizedResult({
+      session,
+      capture,
+      readSnapshot: (snapshot) => snapshot,
+    });
+    return {
+      result,
+      elapsedMs: Date.now() - startedAt,
+      staleAccepts: countDiagnosticEventsByPhase(['post_gesture_snapshot_stale_accept']),
+      settled: countDiagnosticEventsByPhase(['post_gesture_snapshot_stabilized']),
+    };
+  });
+
+  await vi.advanceTimersByTimeAsync(10_000);
+  return { ...(await resultPromise), captures: capture.mock.calls.length };
+}
+
+function pickupFrom(producer: ProducerOverride, y = 500) {
+  return makeSnapshotState(pickupSnapshot(y).nodes, producer);
+}
+
+test('a scroll that moved nothing settles at the first quiet pair when the bridge served both reads (iOS)', async () => {
+  const outcome = await stabilizeScriptedScroll({
+    baseline: pickupFrom(BRIDGE_PRODUCER),
+    reads: [pickupFrom(BRIDGE_PRODUCER)],
+  });
+
+  assert.equal(outcome.captures, 2);
+  assert.ok(outcome.elapsedMs < 1_500, `waited ${outcome.elapsedMs}ms`);
+  assert.equal(outcome.staleAccepts, 1);
+  assert.equal(outcome.result.postGestureOutcome?.kind, 'no-effect');
+});
+
+test('a scroll that moved nothing still waits out the distrust cap when the runner served the reads (iOS)', async () => {
+  const outcome = await stabilizeScriptedScroll({
+    baseline: pickupFrom(RUNNER_PRODUCER),
+    reads: [pickupFrom(RUNNER_PRODUCER)],
+  });
+
+  assert.ok(outcome.elapsedMs >= 3_500, `settled after ${outcome.elapsedMs}ms`);
+  assert.equal(outcome.result.postGestureOutcome?.kind, 'no-effect');
+});
+
+test('a quiet pair with one unproven read keeps distrusting a baseline match (iOS)', async () => {
+  // The same lineage key on both reads, so only the producer fact tells them apart.
+  const comparisonKey = 'bridge|app';
+  const read = (producer: ProducerOverride) =>
+    makeSnapshotState(pickupSnapshot(500).nodes, { ...producer, comparisonKey });
+  const outcome = await stabilizeScriptedScroll({
+    baseline: read(BRIDGE_PRODUCER),
+    reads: [read(RUNNER_PRODUCER), read(BRIDGE_PRODUCER), read(RUNNER_PRODUCER)],
+  });
+
+  assert.ok(outcome.elapsedMs >= 3_500, `settled after ${outcome.elapsedMs}ms`);
+});
+
+test('a scroll that moves keeps polling a live producer until two reads agree (iOS)', async () => {
+  // Mid-fling reads differ from each other, so no pair is quiet until the list comes to rest.
+  const outcome = await stabilizeScriptedScroll({
+    baseline: pickupFrom(BRIDGE_PRODUCER, 500),
+    reads: [
+      pickupFrom(BRIDGE_PRODUCER, 400),
+      pickupFrom(BRIDGE_PRODUCER, 300),
+      pickupFrom(BRIDGE_PRODUCER, 200),
+      pickupFrom(BRIDGE_PRODUCER, 120),
+    ],
+  });
+
+  assert.equal(outcome.captures, 5);
+  assert.equal(outcome.result.value.nodes[1]?.rect?.y, 120);
+  assert.equal(outcome.settled, 1);
+  assert.equal(outcome.result.postGestureOutcome, undefined);
+});
