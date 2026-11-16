@@ -26,9 +26,12 @@ extension RunnerTests {
     let identity: TextEntryElementIdentity
     let isFocused: Bool
 
-    /// Same value on the same element; a frame change alone on an identified field is not a change.
+    /// Same value on the same element; a frame change alone on an identified field is not a change,
+    /// and neither is one on an unidentified field that held focus in both reads. A bottom search bar
+    /// keeps rising with the keyboard for about 0.4 s after its text arrived, so judging it by frame
+    /// held the read-back open until it stopped, although its value never changed.
     func isSettled(with other: TextEntryObservation) -> Bool {
-      value == other.value && identity.isSameElement(as: other.identity)
+      value == other.value && (identity.isSameElement(as: other.identity) || isMovedWhileFocused(since: other))
     }
 
     /// An element without an identifier that kept focus but moved: a bottom search bar rises above

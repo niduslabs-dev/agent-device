@@ -215,6 +215,34 @@ extension RunnerTests {
     XCTAssertFalse(field.isSameElement(as: TextEntryElementIdentity(identifier: "otp-input", elementType: "TextField", frame: frame)))
   }
 
+  // A bottom search bar still rising with the keyboard keeps its value, so its read-back settles
+  // one stability window after the first read. An unfocused field that moves is not proven the same.
+  func testReplacementSettlesOnAFocusedUnidentifiedFieldThatKeepsMoving() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    func searchBar(y: CGFloat, focused: Bool) -> TextEntryObservation {
+      TextEntryObservation(
+        value: "wifi2",
+        identity: TextEntryElementIdentity(
+          identifier: nil, elementType: "SearchField", frame: CGRect(x: 8, y: y, width: 326, height: 28)
+        ),
+        isFocused: focused
+      )
+    }
+    let baseline = TextEntryObservation(
+      value: "", identity: searchBar(y: 808, focused: true).identity, isFocused: true
+    )
+    var moving = ReplacementTextEntryConfirmation(requested: "wifi2", baseline: baseline, startedAt: startedAt)
+    XCTAssertNil(moving.observe(searchBar(y: 781, focused: true), at: startedAt.addingTimeInterval(0.05)))
+    XCTAssertNil(moving.observe(searchBar(y: 599, focused: true), at: startedAt.addingTimeInterval(0.12)))
+    let settled = try XCTUnwrap(moving.observe(searchBar(y: 521, focused: true), at: startedAt.addingTimeInterval(0.26)))
+    XCTAssertEqual(settled.verified, true)
+    XCTAssertNil(settled.failure)
+
+    var unfocused = ReplacementTextEntryConfirmation(requested: "wifi2", baseline: baseline, startedAt: startedAt)
+    XCTAssertNil(unfocused.observe(searchBar(y: 781, focused: false), at: startedAt.addingTimeInterval(0.05)))
+    XCTAssertNil(unfocused.observe(searchBar(y: 599, focused: false), at: startedAt.addingTimeInterval(0.26)))
+  }
+
   func testReplacementIntoAnUnidentifiedFieldThatMovedVerifiesOnlyAnExactReadBackWhileFocused() {
     // A bottom search bar measured on an iPhone Air simulator, iOS 26.5: focused and docked before
     // typing, then raised above the keyboard and widened once the text arrived.
