@@ -129,8 +129,13 @@ final class AutomationCommandHandler {
         }
       }
       if (target == null) throw new IllegalStateException("No editable field at the fill point");
-      tap(automation, x, y, dispatch);
-      if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
+      // A tap on a focused field only moves the caret, and a caret next to a word the spell
+      // checker flagged opens the suggestion popup over the field. Text replacement needs focus
+      // only, so the tap is reserved for a field that does not hold it yet.
+      if (!target.isFocused()) {
+        tap(automation, x, y, dispatch);
+        if (!target.refresh()) throw new IllegalStateException("Fill target disappeared after focus");
+      }
       if (!target.isFocused() && !target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)) {
         throw new IllegalStateException("Field focus was refused");
       }
