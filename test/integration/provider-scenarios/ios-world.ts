@@ -169,7 +169,12 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       command: 'ios.runner.backInApp',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
-      request: { command: 'backInApp', appBundleId: 'com.apple.Preferences' },
+      request: {
+        command: 'backInApp',
+        appBundleId: 'com.apple.Preferences',
+        backInAppPhase: 'hostTapLookup',
+      },
+      // No `hostBackTap`: the runner finished this back itself, so no host tap follows.
       result: { backed: true },
     },
     {

@@ -77,6 +77,77 @@ extension RunnerTests {
     XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
   }
 
+  /// With the host tapping, the lookup answers the still button's point and taps nothing; once the
+  /// host taps that point, the confirmation reads the pop against the state the lookup kept.
+  @MainActor
+  func testInAppBackHostTapLookupAnswersThePointAndConfirmsTheHostTap() throws {
+    let status = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+
+    guard case .awaitingHostTap(let tap) = try performInAppBack(app: app, phase: .hostTapLookup) else {
+      return XCTFail("a still back button must be answered for the host to tap")
+    }
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.pressed, false)
+    XCTAssertTrue(app.navigationBars["Detail"].exists, "the lookup must not tap")
+    let button = app.navigationBars.buttons.matching(identifier: Self.navigationBarBackButtonIdentifier).firstMatch.frame
+    XCTAssertTrue(button.contains(CGPoint(x: tap.x, y: tap.y)))
+
+    app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: tap.x, dy: tap.y)).tap()
+    guard case .performed = try performInAppBack(app: app, phase: .hostTapConfirm) else {
+      return XCTFail("the host's tap on the button must be confirmed as the pop")
+    }
+    let popped = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Back pressed"), object: status)
+    XCTAssertEqual(XCTWaiter().wait(for: [popped], timeout: 5), .completed)
+  }
+
+  /// A confirmation of a host tap that never came reads the unchanged bar: an unknown outcome.
+  @MainActor
+  func testInAppBackHostTapConfirmationWithoutATapIsUnverified() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+
+    guard case .awaitingHostTap = try performInAppBack(app: app, phase: .hostTapLookup) else {
+      return XCTFail("a still back button must be answered for the host to tap")
+    }
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app, phase: .hostTapConfirm) else {
+      return XCTFail("an unchanged bar must not confirm a host tap")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+  }
+
+  /// A confirmation with no kept lookup, such as one after a whole back cleared it, judges nothing.
+  @MainActor
+  func testInAppBackHostTapConfirmationWithoutALookupIsUnverified() throws {
+    _ = try launchBackNavigationFixture(["--agent-device-back-navigation-bar"])
+    defer { endBackFixture() }
+
+    guard case .unconfirmed(let payload) = try performInAppBack(app: app, phase: .hostTapConfirm) else {
+      return XCTFail("a confirmation without a lookup must not read as performed")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
+    XCTAssertEqual(lastNavigationBarBackTraceForTesting?.found, "no-lookup")
+    XCTAssertTrue(app.navigationBars["Detail"].exists)
+  }
+
+  /// The host taps only where its digitizer points are the window's: portrait, at the screen origin.
+  func testHostBackTapOnlyInAPortraitWindowAtTheScreenOrigin() {
+    let button = CGRect(x: 8, y: 62, width: 44, height: 44)
+    func geometry(_ window: CGRect, _ orientation: Int) -> SurfaceGeometry {
+      SurfaceGeometry(windowOnScreen: SurfaceRect(window), panelNativeSize: nil, orientation: orientation)
+    }
+    let portrait = CGRect(x: 0, y: 0, width: 402, height: 874)
+    XCTAssertEqual(
+      Self.hostBackTap(at: button, geometry: geometry(portrait, RunnerInterfaceOrientation.portrait)),
+      HostBackTapPayload(x: 30, y: 84, viewportWidth: 402, viewportHeight: 874)
+    )
+    XCTAssertNil(Self.hostBackTap(
+      at: button, geometry: geometry(CGRect(x: 0, y: 0, width: 874, height: 402), RunnerInterfaceOrientation.landscapeLeft)))
+    XCTAssertNil(Self.hostBackTap(
+      at: button, geometry: geometry(portrait, RunnerInterfaceOrientation.portraitUpsideDown)))
+    XCTAssertNil(Self.hostBackTap(
+      at: button, geometry: geometry(CGRect(x: 100, y: 40, width: 402, height: 874), RunnerInterfaceOrientation.portrait)))
+  }
+
   /// A floating back button with no label, outside the bar's subtree as on the iPhone Duo, is pressed
   /// and its pop is confirmed through the bar's title.
   @MainActor
@@ -1008,7 +1079,7 @@ extension RunnerTests {
     switch Self.backSwipeOutcome(observation: .unchanged) {
     case .unconfirmed(let payload):
       XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNoChange)
-    case .performed, .refused:
+    case .performed, .refused, .awaitingHostTap:
       XCTFail("an unchanged screen must refuse with the no-change reason")
     }
     // A screen that refused to be sampled after the swipe is an unknown outcome, never a success.
@@ -1017,7 +1088,7 @@ extension RunnerTests {
       XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeUnverified)
       XCTAssertEqual(payload.hint, RunnerAppScreenCaptureFailure.unresolvedWindow.hint)
       XCTAssertTrue(payload.message.contains("unknown outcome"))
-    case .performed, .refused:
+    case .performed, .refused, .awaitingHostTap:
       XCTFail("an unsampled screen after the swipe must report an unknown outcome")
     }
   }

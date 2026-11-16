@@ -19,6 +19,7 @@ Accepted
 - If `close` would retain a runner whose main-thread occupancy is set, stop that runner first and await the stop.
 - After a root AX failure, clear the cached app target. Keep raw/strict errors distinct from interactive recovery payloads.
 - On a local iOS Simulator, send a primary single coordinate tap to the Simulator's digitizer service, not through XCTest, when the measuring capture proves the point is outside every text input and the app fills the portrait screen. Otherwise, and whenever that route is unavailable, use the XCTest tap.
+- On a local iOS Simulator, `back` sends its navigation bar back button tap through the same digitizer route. The runner looks the button up and keeps the state it read, the host taps, and the runner confirms the pop against that state. Only a portrait window at the screen origin qualifies.
 
 ## Context
 
@@ -189,6 +190,36 @@ Daemon guards before dispatch, `--settle`, and `--verify` are unchanged: they ru
 The direct touch returns before the app handles it, sooner than the XCTest tap returned.
 An in-app `back` that arrives during the push the tap started can find no back button yet.
 Therefore, when the back lookup finds no back button, the runner waits once for the app to go idle, bounded by `interactionIdleTimeoutDefault`, and looks again before it uses the edge swipe.
+
+#### `back` through the digitizer
+
+The `back` button tap took the XCTest route even on a Simulator, and paid its playback confirmation (about 280 ms).
+On a local iOS-family Simulator in the default device set, the daemon now splits `backInApp` in three requests:
+
+1. `backInAppPhase: hostTapLookup`. The runner looks the button up as before. When it finds a still button in a portrait window at the screen origin, it taps nothing. It answers the button's center in `hostBackTap` and keeps the state it read. Every other outcome, the swipe included, runs to the end in this request.
+2. The host taps that point through the digitizer helper.
+3. `backInAppPhase: hostTapConfirm`. The runner reads the bar until it shows the pop against the kept state, as the runner tap's confirmation does. Without a kept lookup it reads nothing and answers `BACK_SWIPE_UNVERIFIED`.
+
+Every `backInApp` request other than a confirmation clears the kept state.
+A host tap that sent nothing returns the whole back to the runner, which looks up and taps again.
+A host tap that may have been sent but was not confirmed fails with `simulator-hid-outcome-unknown`, and nothing repeats it.
+
+The lookup also got cheaper on both routes.
+One read of the buttons and bars, then the live read, which reads the bars again and compares the live frame with the first read, answers a labeled button when the two agree.
+The still check's extra round runs only when they disagree, a read fails, or a candidate has no label.
+A button with no label shows its pop only through a bar title, which can change on its own, so it keeps the full still check.
+
+Once the bar shows the pop, `back` waits, bounded by `interactionIdleTimeoutDefault`, for the app to go idle, on both tap routes.
+The tree shows the pop about 0.2 s after the tap, and the animation runs about 0.3 s more.
+UIKit drops a touch that lands in the transition, so a direct-touch `press` right after a `back` that answered earlier was silently lost: the 2026-11-17 bench hit it on `back`, `snapshot`, `press @ref`.
+The idle wait is reliable only here, once the pop has begun. Before the tap it returned in 2 to 90 ms on Settings even while a pop was about to start, and took about 470 ms on a screen at rest.
+
+Rejected alternatives for `back`:
+
+- Wait for the app to go idle before every lookup, then read once: the wait does not track the bar. It cost about 470 ms on a screen at rest and made `back` slower than before.
+- Answer as soon as the bar shows the pop, about 0.3 s sooner: the next direct touch can be lost, as above.
+- Wait for the app to go idle at the start of the next direct touch instead: a direct `press` never reaches the runner, so it would need a new runner command and a round trip, decided by a timing guess about the previous command that other clients of the session can defeat.
+- A runner command for the tap point alone, with a separate confirmation command: two new commands for one decision, and the swipe fallback would need its own request.
 
 Rejected alternatives:
 

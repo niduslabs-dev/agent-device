@@ -35,6 +35,18 @@ The guarantee that the loop exists for stays: no caller acts on a tree that is s
 A moving list gives reads that differ from each other, so it never forms a quiet pair, whatever its producer.
 Only the second, XCTest-specific guard (a stale tree that holds still) is relaxed, and only for producers that cannot serve one.
 
+### Amendment: iOS Simulator scroll through the digitizer
+
+A controlled iOS `scroll` on a local Simulator in the default device set no longer drags through XCTest.
+The runner resolves the frame, the keyboard band, and the plan as before, and answers the planned drag in `hostScrollDrag` instead of sending it (`scrollDispatch: host`).
+The host sends it through the Simulator's digitizer helper (ADR 0005) as one finger, a sample every frame, eased out with the runner's cubic, over `IOS_HOST_SCROLL_DURATION_MS` (300 ms) unless the caller names a duration, then rests 48 ms before the lift. A 200 ms drag was rejected: on Settings, a scroll down then up from the top came back to the top 0 times in 5 at 200 ms and 5 times in 5 at 300 ms.
+The helper answers after a barrier behind the lift, so every move has reached the guest's HID service when the scroll returns.
+Inertial scrolls (`scroll top` and `bottom`), other windows than a portrait one at the screen origin, and other devices keep the runner drag. A digitizer that sent nothing returns the scroll to the runner.
+
+This decision is unchanged by the route: the next capture still runs the quiet-window loop, and the gesture marker does not depend on who sent the drag.
+The finger comes to rest before it lifts, so the content stops where it stops. A 2026-11-17 Settings run read the same positions 1 s and 2 s after each scroll, at rest and right after a `back`.
+The open gap below shrinks for this route: the drag's moves reach the app while the host is still sending them, so motion starts before the command returns.
+
 ## Rejected alternatives
 
 - **Skip the wait when the scroll reports no movement.** The iOS runner's scroll reports no movement fact, and adding one means a runner change with its own device matrix. A content-offset fact also cannot see a list that ignores synthesized scrolls, which is the #1600 case. The producer fact covers the measured cost without a runner change.

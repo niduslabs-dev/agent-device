@@ -17,7 +17,9 @@ See `git log upstream/main..main` for the exact list. In short:
 - Faster fills, key events, capture settling and daemon-client startup.
 - Android emulator input (taps, swipes, scrolls, back, home) goes through the emulator's own gRPC
   endpoint instead of the snapshot helper (ADR 0041).
-- iOS simulator taps go through the simulator's digitizer instead of XCTest (ADR 0005).
+- iOS simulator taps, `back` button taps and controlled scrolls go through the simulator's digitizer
+  instead of XCTest, and a default scroll there drags for 300 ms instead of 400 ms (ADR 0005, ADR 0040).
+- A default Android scroll pans for 120 ms instead of 300 ms (ADR 0041).
 - iOS `back` still presses the back button when UIKit rests the navigation bar a rounding error
   off a whole point; upstream's exact frame comparison then refuses every `back` until the app
   restarts.

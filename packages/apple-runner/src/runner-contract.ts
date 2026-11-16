@@ -178,6 +178,18 @@ export type RunnerCommand = {
   sequenceOrientation?: RunnerSequenceOrientation;
   steps?: RunnerSequenceStep[];
   snapshotBridge?: RunnerSnapshotBridgeRequest;
+  /**
+   * `backInApp` only: the part of an iOS back this request runs when the host taps the back button
+   * (ADR 0005). `hostTapLookup` answers a still button's point in `hostBackTap` instead of tapping
+   * it; `hostTapConfirm` confirms the pop of the tap the host then sent. Absent runs the whole back.
+   */
+  backInAppPhase?: 'hostTapLookup' | 'hostTapConfirm';
+  /**
+   * `scroll` only: `host` asks for the planned drag in `hostScrollDrag` instead of a runner drag, so
+   * the host sends it through the Simulator's digitizer. The runner still drags itself when the
+   * window is not portrait at the screen origin or the release is inertial.
+   */
+  scrollDispatch?: 'host';
 };
 
 /**

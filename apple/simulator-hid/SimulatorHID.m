@@ -17,7 +17,10 @@
 
 static NSString *const RunnerDigitizerService = @"com.apple.coredevice.feature.remote.hid.digitizer";
 static const uint64_t DigitizerEventStart = 0;
+static const uint64_t DigitizerEventMove = 1;
 static const uint64_t DigitizerEventEnd = 2;
+// A drag path's last offset; the host's longest scroll duration.
+static const double MaxDragMs = 10000;
 static const uint64_t KeyboardStateUp = 2;
 // The connect-time liveness reply pays for dtuhidd's demand launch (idb `DTUHIDTiming.livenessTimeout`).
 static const int64_t LivenessTimeoutMs = 4000;
@@ -166,6 +169,15 @@ static BOOL roundTripBarrier(xpc_connection_t connection, int64_t timeoutMs) {
   return timedOut == 0 && replied;
 }
 
+// The reply to a touch whose lift was sent: `ok` once a barrier behind it is answered.
+static NSDictionary *confirmedTouchReply(xpc_connection_t connection, double started) {
+  if (!roundTripBarrier(connection, TapBarrierTimeoutMs)) {
+    // The contact may already be down in the guest, so the host must not repeat this touch blindly.
+    return @{@"ok": @NO, @"reason": @"barrier-unanswered", @"dispatched": @YES};
+  }
+  return @{@"ok": @YES, @"elapsedMs": @(nowMs() - started)};
+}
+
 static NSDictionary *tap(xpc_connection_t connection, CGSize screen, NSDictionary *request) {
   NSNumber *x = request[@"x"], *y = request[@"y"];
   NSNumber *viewportWidth = request[@"viewportWidth"], *viewportHeight = request[@"viewportHeight"];
@@ -188,11 +200,51 @@ static NSDictionary *tap(xpc_connection_t connection, CGSize screen, NSDictionar
   xpc_connection_send_message(connection, touchMessage(xRatio, yRatio, DigitizerEventStart));
   if (holdMs > 0) usleep((useconds_t)(holdMs * 1000));
   xpc_connection_send_message(connection, touchMessage(xRatio, yRatio, DigitizerEventEnd));
-  if (!roundTripBarrier(connection, TapBarrierTimeoutMs)) {
-    // The contact may already be down in the guest, so the host must not repeat this tap blindly.
-    return @{@"ok": @NO, @"reason": @"barrier-unanswered", @"dispatched": @YES};
+  return confirmedTouchReply(connection, started);
+}
+
+// One finger along `path` ([{x, y, offsetMs}], offsets from 0 and increasing, in the app's points):
+// down at the first sample, a move at each later one on its offset, and the lift at the last. The
+// whole path is checked before the contact goes down, so a refusal sent nothing.
+static NSDictionary *drag(xpc_connection_t connection, CGSize screen, NSDictionary *request) {
+  NSNumber *viewportWidth = request[@"viewportWidth"], *viewportHeight = request[@"viewportHeight"];
+  if (![viewportWidth isKindOfClass:NSNumber.class] || ![viewportHeight isKindOfClass:NSNumber.class] ||
+      fabs(viewportWidth.doubleValue - screen.width) > 0.5 || fabs(viewportHeight.doubleValue - screen.height) > 0.5) {
+    return @{@"ok": @NO, @"reason": @"viewport-not-portrait-screen"};
   }
-  return @{@"ok": @YES, @"elapsedMs": @(nowMs() - started)};
+  NSArray *path = request[@"path"];
+  if (![path isKindOfClass:NSArray.class] || path.count < 2) return @{@"ok": @NO, @"reason": @"invalid-request"};
+  NSMutableData *ratios = [NSMutableData dataWithLength:path.count * 3 * sizeof(double)];
+  double *values = ratios.mutableBytes;
+  double previousOffsetMs = -1;
+  for (NSUInteger index = 0; index < path.count; index += 1) {
+    NSDictionary *sample = path[index];
+    if (![sample isKindOfClass:NSDictionary.class]) return @{@"ok": @NO, @"reason": @"invalid-request"};
+    NSNumber *x = sample[@"x"], *y = sample[@"y"], *offsetMs = sample[@"offsetMs"];
+    if (![x isKindOfClass:NSNumber.class] || ![y isKindOfClass:NSNumber.class] || ![offsetMs isKindOfClass:NSNumber.class]) {
+      return @{@"ok": @NO, @"reason": @"invalid-request"};
+    }
+    double xRatio = x.doubleValue / screen.width, yRatio = y.doubleValue / screen.height;
+    if (!(xRatio >= 0 && xRatio <= 1 && yRatio >= 0 && yRatio <= 1)) return @{@"ok": @NO, @"reason": @"point-off-screen"};
+    double offset = offsetMs.doubleValue;
+    if (!(offset > previousOffsetMs) || (index == 0 && offset != 0) || offset > MaxDragMs) {
+      return @{@"ok": @NO, @"reason": @"invalid-path-timeline"};
+    }
+    previousOffsetMs = offset;
+    values[index * 3] = xRatio;
+    values[index * 3 + 1] = yRatio;
+    values[index * 3 + 2] = offset;
+  }
+  double started = nowMs();
+  for (NSUInteger index = 0; index < path.count; index += 1) {
+    double waitMs = started + values[index * 3 + 2] - nowMs();
+    if (waitMs > 0) usleep((useconds_t)(waitMs * 1000));
+    uint64_t eventType = index == 0 ? DigitizerEventStart : DigitizerEventMove;
+    xpc_connection_send_message(connection, touchMessage(values[index * 3], values[index * 3 + 1], eventType));
+  }
+  NSUInteger last = path.count - 1;
+  xpc_connection_send_message(connection, touchMessage(values[last * 3], values[last * 3 + 1], DigitizerEventEnd));
+  return confirmedTouchReply(connection, started);
 }
 
 int main(int argc, const char *argv[]) {
@@ -234,7 +286,8 @@ int main(int argc, const char *argv[]) {
           emit(@{@"ok": @NO, @"reason": @"invalid-request"});
           continue;
         }
-        NSMutableDictionary *reply = [tap(connection, screen, request) mutableCopy];
+        BOOL isDrag = [request[@"kind"] isEqual:@"drag"];
+        NSMutableDictionary *reply = [(isDrag ? drag(connection, screen, request) : tap(connection, screen, request)) mutableCopy];
         if (request[@"id"] != nil) reply[@"id"] = request[@"id"];
         emit(reply);
       }

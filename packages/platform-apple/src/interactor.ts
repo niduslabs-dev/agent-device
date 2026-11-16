@@ -10,6 +10,7 @@ import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { actOnAppleAlert, awaitAppleAlert, readAppleAlert } from './alert.ts';
 import { runAppleRunnerCommand } from './core/runner-client.ts';
+import { runIosInAppBack } from './simulator-hid/back.ts';
 import { isAppleFoldableSimulator, setAppleFoldableOrientation } from './foldable/orientation.ts';
 import {
   withAppleRunnerProvider,
@@ -151,11 +152,7 @@ export function createAppleInteractor(
       }
       // iOS has one back, whichever mode was asked: the navigation bar back button, else the verified
       // left-edge swipe.
-      await runAppleRunnerCommand(
-        device,
-        { command: 'backInApp', appBundleId: runnerContext.appBundleId },
-        runnerOpts,
-      );
+      await runIosInAppBack(device, runnerContext.appBundleId, runnerOpts);
     },
     home: async () => {
       if (isTvOsDevice(device)) {

@@ -284,6 +284,42 @@ struct Command: Codable {
   let sequenceOrientation: Int?
   let steps: [SequenceStep]?
   let snapshotBridge: SnapshotBridgeCommandPayload?
+  /// `backInApp` only: which part of an iOS back this request runs. Absent runs the whole back.
+  let backInAppPhase: BackInAppPhaseWire?
+  /// `scroll` only: `host` asks for the planned drag back instead of a runner drag (ADR 0040).
+  let scrollDispatch: ScrollDispatchWire?
+}
+
+/// Who sends a `scroll` drag. Absent is the runner.
+enum ScrollDispatchWire: String, Codable {
+  case host
+}
+
+/// The drag a `scroll` with `scrollDispatch: host` planned and did not send, in the screen points of
+/// a portrait window at the screen origin, and that window's size, which the host checks against
+/// the screen.
+struct HostScrollDragPayload: Codable, Equatable {
+  let x: Double
+  let y: Double
+  let x2: Double
+  let y2: Double
+  let viewportWidth: Double
+  let viewportHeight: Double
+}
+
+/// The wire spelling of `RunnerTests.InAppBackPhase` past `complete`, which is the absent field.
+enum BackInAppPhaseWire: String, Codable {
+  case hostTapLookup
+  case hostTapConfirm
+}
+
+/// The back button point a `hostTapLookup` answers, in the screen points of a portrait window at the
+/// screen origin, and that window's size, which the host checks against the screen.
+struct HostBackTapPayload: Codable, Equatable {
+  let x: Double
+  let y: Double
+  let viewportWidth: Double
+  let viewportHeight: Double
 }
 
 extension Command {
@@ -586,6 +622,10 @@ struct DataPayload: Codable {
   var matchCount: Int?
   var hittable: Bool?
   var rect: SnapshotRect?
+  /// Set on a `backInApp` `hostTapLookup` that found a still back button and tapped nothing.
+  var hostBackTap: HostBackTapPayload?
+  /// Set on a `scroll` with `scrollDispatch: host` that planned its drag and sent nothing.
+  var hostScrollDrag: HostScrollDragPayload?
 }
 
 /// Mirrors the TS `FillVerificationTarget`; its nullable identity fields encode as explicit nulls.
