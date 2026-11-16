@@ -22,6 +22,7 @@ import {
   classifyPostGestureBaselineEvidence,
   haveIdenticalDiscriminatingSurfaces,
   summarizeDiscriminatingSurfaceDivergence,
+  snapshotPostGestureReadFreshness,
   snapshotSurfaceComparisonKey,
 } from './interaction-surface-signature.ts';
 import {
@@ -436,6 +437,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
             signature: buildInteractionSurfaceSignature(snapshot.nodes),
             comparisonKey: snapshotSurfaceComparisonKey(snapshot),
             keyboard: snapshot.keyboard,
+            readFreshness: snapshotPostGestureReadFreshness(snapshot),
           };
         },
         signaturesStable: areInteractionSurfaceSignaturesStable,
@@ -490,6 +492,10 @@ function supportsPostGestureStabilization(device: SessionState['device']): boole
  * cannot reproduce the stale-but-internally-consistent AX tree this check
  * exists to catch. Gating here keeps Android's stabilization latency and
  * semantics untouched — this only ever adds cost on the Apple lane.
+ *
+ * The baseline is stored for every Apple producer, because the no-effect claim (#1600) needs it.
+ * Whether a baseline match is distrusted is decided per reading, from the producer's
+ * `postGestureRead` fact (ADR 0040): a Simulator AX bridge pair settles at once.
  */
 function requiresPostGestureBaselineDistrust(device: SessionState['device']): boolean {
   return isApplePlatform(device.platform);

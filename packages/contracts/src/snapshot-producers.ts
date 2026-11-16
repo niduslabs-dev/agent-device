@@ -79,6 +79,15 @@ export type SnapshotProducerFacts = Readonly<{
    * descendants, or nothing.
    */
   sparseRootWarning: 'xctest-query' | 'appium-page-source' | 'none';
+  /**
+   * Whether every read from this producer re-queries the live app after a synthesized gesture.
+   * `live`: two agreeing reads that still equal the pre-gesture tree prove the gesture moved
+   * nothing, so post-gesture stabilization settles on that pair at once. `unproven`: the producer may
+   * serve a cached tree that a synthesized touch did not resync (XCTest, #1542), so the loop keeps
+   * distrusting a baseline match until its cap (ADR 0040). A new producer states `unproven` until a
+   * device run shows otherwise.
+   */
+  postGestureRead: 'live' | 'unproven';
 }>;
 
 const GENERAL_QUIET_MS = 500;
@@ -97,6 +106,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'xctest-query',
+    postGestureRead: 'unproven',
   },
   'simulator-ax-bridge': {
     channels: ['xctest'],
@@ -105,6 +115,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: 300,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'live',
   },
   'appium-source': {
     channels: ['xctest', 'android'],
@@ -113,6 +124,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'appium-page-source',
+    postGestureRead: 'unproven',
   },
   'revyl-ios-tree': {
     channels: ['xctest'],
@@ -121,6 +133,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'revyl-android-tree': {
     channels: ['android'],
@@ -129,6 +142,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'android-uiautomator': {
     channels: ['android'],
@@ -137,6 +151,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'live',
   },
   'cdp-dom': {
     channels: ['android'],
@@ -145,6 +160,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'harmonyos-uitest': {
     channels: ['harmonyos-arkui'],
@@ -153,6 +169,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'macos-helper': {
     channels: ['macos-helper'],
@@ -161,6 +178,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'linux-atspi': {
     channels: ['linux-atspi'],
@@ -169,6 +187,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'dense',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
   'agent-browser': {
     channels: ['web'],
@@ -177,6 +196,7 @@ export const SNAPSHOT_PRODUCERS = {
     quietMs: GENERAL_QUIET_MS,
     refs: 'backend-issued',
     sparseRootWarning: 'none',
+    postGestureRead: 'unproven',
   },
 } as const satisfies Record<SnapshotProducer, SnapshotProducerFacts>;
 

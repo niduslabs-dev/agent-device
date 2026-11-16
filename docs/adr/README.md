@@ -41,6 +41,7 @@
 | [0037 Web Session Devices](0037-web-session-devices.md) | web sessions as devices of their own, the session name rule, the `p_`/`t_` backend key and tenant isolation, and first-open locking for web |
 | [0038 Snapshot capture source routing](0038-snapshot-capture-source-routing.md) | the source router for multi-source owners, one fallback, refusal scopes, surface proof, and the producer registry |
 | [0039 Pre-dispatch admission](0039-pre-dispatch-admission.md) | one admission step for resolved-target input: ordered typed checks, one request-bound wait loop, one evidence path, and no extra reads for an idle target |
+| [0040 Post-gesture distrust by producer freshness](0040-post-gesture-distrust-by-producer-freshness.md) | the post-gesture distrust cap, the `postGestureRead` producer fact, and when a quiet pair that equals the pre-gesture tree settles at once |
 
 ADRs record rationale.
 The registries and gates they describe are the current source of truth.
