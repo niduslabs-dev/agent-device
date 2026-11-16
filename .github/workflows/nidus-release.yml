@@ -1,0 +1,154 @@
+name: Nidus release
+
+# Fork-only release for niduslabs-dev/agent-device. Upstream's release.yml publishes to npm through
+# trusted publishing and stays disabled in this fork. This workflow only builds the same tarball
+# `pnpm pack` produces and attaches it, with its SHA-256, to a GitHub Release for the tag.
+# scripts/nidus/install-latest.sh installs from those releases. See docs/nidus-fork.md.
+#
+# Push a `vX.Y.Z-nidus.N` tag to release. Dispatch with that tag to rebuild a release whose run failed.
+on:
+  push:
+    tags:
+      - 'v*-nidus.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing vX.Y.Z-nidus.N tag to build and release'
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: nidus-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ inputs.tag || github.ref_name }}
+    # The package builds the Apple runner for iOS, macOS, tvOS and visionOS and the Swift macOS
+    # helper, so it needs Xcode. macOS is the only runner that can build it; GitHub-hosted runners
+    # are free for public repositories. Same image as upstream's release build.
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - name: Resolve version from tag
+        id: version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-nidus\.[1-9][0-9]*$ ]]; then
+            echo "::error::Tag must look like vX.Y.Z-nidus.N, got '$TAG'." >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          ref: refs/tags/${{ steps.version.outputs.tag }}
+
+      - name: Resolve pnpm version from packageManager
+        id: pnpm
+        run: |
+          set -euo pipefail
+          spec="$(node -p "require('./package.json').packageManager ?? ''")"
+          case "$spec" in
+            pnpm@[0-9]*) echo "version=${spec#pnpm@}" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::packageManager must be pnpm@<version>, got '$spec'." >&2; exit 1 ;;
+          esac
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        with:
+          version: ${{ steps.pnpm.outputs.version }}
+
+      # No dependency cache: the released bytes come from a clean install.
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '24.13'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Exports AGENT_DEVICE_ANDROID_BUILD_TOOLS, which the prebuilt Android helper build needs.
+      - name: Setup Android SDK
+        uses: ./.github/actions/setup-android-sdk
+
+      # The same stamping as upstream's `release-version.mjs stamp`, which only accepts upstream's
+      # version formats. Nothing is committed: the version lives in the tag alone.
+      - name: Stamp version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm version "$VERSION" --no-git-tag-version --ignore-scripts
+          node scripts/release-workspace.mjs sync
+          node scripts/sync-mcp-metadata.mjs
+
+      # prepack runs `pnpm release:prepare`: it builds every asset and runs the package checks.
+      - name: Pack
+        id: pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/nidus-release"
+          mkdir -p "$out"
+          pnpm pack --pack-destination "$out"
+          tarball="agent-device-$VERSION.tgz"
+          if [ ! -f "$out/$tarball" ]; then
+            echo "::error::Expected $out/$tarball after pnpm pack." >&2
+            ls -la "$out" >&2
+            exit 1
+          fi
+          (cd "$out" && shasum -a 256 "$tarball" > "$tarball.sha256" && cat "$tarball.sha256")
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nidus-release
+          path: ${{ runner.temp }}/nidus-release/agent-device-*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: GitHub release ${{ needs.build.outputs.tag }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: nidus-release
+          path: ${{ runner.temp }}/nidus-release
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          TARBALL: ${{ needs.build.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/nidus-release"
+          shasum -a 256 -c "$TARBALL.sha256"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TARBALL" "$TARBALL.sha256" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" "$TARBALL.sha256" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --title "$TAG" --latest \
+              --notes "Fork build of agent-device. Install or update: \`scripts/nidus/install-latest.sh\` (see docs/nidus-fork.md)."
+          fi
