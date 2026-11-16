@@ -15,6 +15,7 @@ import type { InteractorResolution } from '../../core/interactor-resolution.ts';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
 import type { ProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 import type { RequestRouterDeps } from '../request-router.ts';
+import type { NidusCliArgvRunner } from '../nidus-cli-argv-route.ts';
 
 /**
  * Every capability the daemon runtime cannot construct for itself: the platform and provider
@@ -78,6 +79,8 @@ export type DaemonRuntimeDeps = Readonly<{
     | 'providerAppCatalog'
     | 'providerDeviceRuntimeScope'
   >;
+  /** Fork-only: runs a native client's raw CLI argv on the socket transport. */
+  nidusCliArgv?: NidusCliArgvRunner;
 }>;
 
 /** Everything the composition factory needs that the server owns: paths, policy, and the store. */
