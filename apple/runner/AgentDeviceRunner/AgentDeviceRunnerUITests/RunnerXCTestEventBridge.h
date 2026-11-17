@@ -119,7 +119,9 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
 FOUNDATION_EXPORT CGSize RunnerSoleScreenSize(void);
 
 // The same measurement as `RunnerSoleScreenSize` for one given `XCUIScreen`, whatever the screen
-// count. Any failed read answers `CGSizeZero`.
+// count. Any failed read answers `CGSizeZero`. On a simulator, a scale XCTest reads as 0 (Device
+// Hub quit while the simulator stays booted) is taken from the device type when the pixel bounds
+// are the device type's main screen; any other screen stays unmeasured.
 FOUNDATION_EXPORT CGSize RunnerScreenPointSize(id screen);
 #endif
 

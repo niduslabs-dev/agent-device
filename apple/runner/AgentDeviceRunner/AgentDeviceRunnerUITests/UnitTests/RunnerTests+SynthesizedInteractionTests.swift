@@ -105,8 +105,10 @@ extension RunnerTests {
     return { method_setImplementation(target, original) }
   }
 
+  /// No bounds and no scale: a zero scale alone on the device type's own screen is measured from the
+  /// simulator's device type.
   func simulateUnreadableDisplay() throws -> () -> Void {
-    try overrideSoleScreenValues(["scale": NSNumber(value: 0)])
+    try overrideSoleScreenValues(["scale": NSNumber(value: 0), "bounds": NSValue(cgRect: .zero)])
   }
 
   func overrideSoleScreenValues(
