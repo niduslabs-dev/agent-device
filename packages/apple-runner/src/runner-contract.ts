@@ -184,9 +184,10 @@ export type RunnerCommand = {
   /**
    * `scroll` only: `host` asks for the planned drag in `hostScrollDrag` instead of a runner drag, so
    * the host sends it through the Simulator's digitizer. The runner still drags itself when the
-   * window is not portrait at the screen origin or the release is inertial.
+   * window is not portrait at the screen origin or the release is inertial. `hostSettle`, sent after
+   * the host's drag, plans and drags nothing and answers once the app is idle.
    */
-  scrollDispatch?: 'host';
+  scrollDispatch?: 'host' | 'hostSettle';
 };
 
 /**

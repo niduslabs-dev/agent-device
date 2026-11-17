@@ -511,14 +511,22 @@ async function runAppleScroll(
         drag,
         iosOptions.durationMs ?? IOS_HOST_SCROLL_DURATION_MS,
       );
-      runnerResult = (await dragThroughSimulatorHid(
-        device,
-        { path, viewport: drag.viewport },
-        runnerOpts.signal,
-      ))
-        ? planned
-        : // The digitizer sent nothing, so the runner plans and drags again itself.
-          await runRunnerCommand(device, scrollCommand, runnerOpts);
+      if (
+        await dragThroughSimulatorHid(device, { path, viewport: drag.viewport }, runnerOpts.signal)
+      ) {
+        // The list can still be moving when the lift lands, and a touch on a moving list first
+        // stops it, so the next scroll would travel short. The runner answers once the app is idle,
+        // as its own drag does.
+        await runRunnerCommand(
+          device,
+          { ...scrollCommand, scrollDispatch: 'hostSettle' },
+          runnerOpts,
+        );
+        runnerResult = planned;
+      } else {
+        // The digitizer sent nothing, so the runner plans and drags again itself.
+        runnerResult = await runRunnerCommand(device, scrollCommand, runnerOpts);
+      }
     }
   } catch (error) {
     throw withAppleScrollKeyboardOcclusion(error);
