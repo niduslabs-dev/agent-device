@@ -8,17 +8,14 @@ import { ensureSimulatorHidHelperBinary } from './helper-cache.ts';
 
 /** Startup covers the helper's own 4 s liveness probe of a demand-launched `dtuhidd`. */
 const HELPER_READY_TIMEOUT_MS = 8_000;
-/**
- * A tap answers within its 1 s barrier, so a reply later than this means the helper is stuck. A
- * drag gets its path's duration on top.
- */
+/** A tap answers within its 1 s barrier, so a reply later than this means the helper is stuck. */
 const TAP_REPLY_TIMEOUT_MS = 2_500;
 const HID_PHASE = 'ios.simulator-hid';
 
 type HelperReply = Readonly<Record<string, unknown>>;
 
 type HelperSession = Readonly<{
-  request: (payload: Record<string, unknown>, timeoutMs: number) => Promise<HelperReply>;
+  request: (payload: Record<string, unknown>) => Promise<HelperReply>;
 }>;
 
 const sessions = new Map<string, Promise<HelperSession | undefined>>();
@@ -72,67 +69,25 @@ export async function tapThroughSimulatorHid(
 ): Promise<boolean> {
   const session = await openSession(device, signal);
   if (!session) return false;
-  const reply = await session.request(
-    {
-      x: target.point.x,
-      y: target.point.y,
-      viewportWidth: target.viewport.width,
-      viewportHeight: target.viewport.height,
-    },
-    TAP_REPLY_TIMEOUT_MS,
-  );
-  return readTouchReply(reply, 'tap');
-}
-
-/** One finger's path in the app's points: the first sample at offset 0, offsets increasing. */
-export type SimulatorHidDragTarget = Readonly<{
-  path: readonly Readonly<{ x: number; y: number; offsetMs: number }>[];
-  viewport: SimulatorHidTapTarget['viewport'];
-}>;
-
-/**
- * Drags one finger along `target.path` through the Simulator's digitizer, with the path's own
- * timing. The same answers as {@link tapThroughSimulatorHid}: `false` sent nothing, and a drag that
- * may have been sent but was not confirmed throws.
- */
-export async function dragThroughSimulatorHid(
-  device: DeviceInfo,
-  target: SimulatorHidDragTarget,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const session = await openSession(device, signal);
-  if (!session) return false;
-  const durationMs = target.path.at(-1)?.offsetMs ?? 0;
-  const reply = await session.request(
-    {
-      kind: 'drag',
-      path: target.path,
-      viewportWidth: target.viewport.width,
-      viewportHeight: target.viewport.height,
-    },
-    durationMs + TAP_REPLY_TIMEOUT_MS,
-  );
-  return readTouchReply(reply, 'drag');
-}
-
-function readTouchReply(reply: HelperReply, kind: 'tap' | 'drag'): boolean {
+  const reply = await session.request({
+    x: target.point.x,
+    y: target.point.y,
+    viewportWidth: target.viewport.width,
+    viewportHeight: target.viewport.height,
+  });
   if (reply.ok === true) {
     emitDiagnostic({
       level: 'debug',
       phase: HID_PHASE,
-      data: { event: kind, elapsedMs: reply.elapsedMs },
+      data: { event: 'tap', elapsedMs: reply.elapsedMs },
     });
     return true;
   }
-  emitDiagnostic({
-    level: 'debug',
-    phase: HID_PHASE,
-    data: { event: `${kind}-refused`, ...reply },
-  });
+  emitDiagnostic({ level: 'debug', phase: HID_PHASE, data: { event: 'tap-refused', ...reply } });
   if (reply.dispatched === true) {
-    throw new AppError('COMMAND_FAILED', `The simulator ${kind} was sent but not confirmed.`, {
+    throw new AppError('COMMAND_FAILED', 'The simulator touch was sent but not confirmed.', {
       reason: 'simulator-hid-outcome-unknown',
-      hint: `Take a snapshot before you act again: the ${kind} may have landed.`,
+      hint: 'Take a snapshot before you press again: the tap may have landed.',
     });
   }
   return false;
@@ -239,10 +194,10 @@ async function startSession(
   emitDiagnostic({ level: 'debug', phase: HID_PHASE, data: { event: 'ready', ...ready } });
 
   let queue: Promise<unknown> = Promise.resolve();
-  const request = (payload: Record<string, unknown>, timeoutMs: number): Promise<HelperReply> => {
+  const request = (payload: Record<string, unknown>): Promise<HelperReply> => {
     const run = queue.then(async () => {
       child.stdin?.write(`${JSON.stringify(payload)}\n`);
-      const reply = parse(await nextLine(timeoutMs));
+      const reply = parse(await nextLine(TAP_REPLY_TIMEOUT_MS));
       if (reply) return reply;
       child.kill();
       forget();

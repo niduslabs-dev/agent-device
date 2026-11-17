@@ -135,11 +135,9 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
       command: 'scroll',
       direction: 'down',
       pixels: 120,
-      durationMs: 300,
+      durationMs: 400,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
-      // A local simulator's controlled scroll asks for the plan; this runner dragged itself.
-      scrollDispatch: 'host',
     },
   ]);
   assert.deepEqual(result, {
@@ -150,7 +148,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
     referenceWidth: 300,
     referenceHeight: 600,
     pixels: 120,
-    durationMs: 300,
+    durationMs: 400,
   });
 });
 
@@ -182,10 +180,9 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
       command: 'scroll',
       direction: 'down',
       amount: 0.5,
-      durationMs: 300,
+      durationMs: 400,
       scrollReleaseBehavior: 'controlled',
       appBundleId: 'com.example.app',
-      scrollDispatch: 'host',
     },
   ]);
   // amount 0.5 against a 600px vertical axis -> 300 planned pixels.

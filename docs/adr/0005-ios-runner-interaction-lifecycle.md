@@ -228,6 +228,7 @@ Rejected alternatives:
 - Skip XCTest quiescence for the tap: the synthesized route never waits for quiescence, and the XCUICoordinate fallback already skips both waits.
 - Return the XCTest tap before playback is confirmed, behind a runner barrier: the runner tap fell to about 125 ms, which is still slower than the direct touch, and it changes the meaning of every runner tap answer.
 - The legacy Indigo HID message path: CoreSimulator 1155.4 and later drop it.
+- Send a controlled `scroll` drag through the same digitizer route: it was correct only with a runner idle wait after the lift, and then about 0.2 s slower than the XCTest drag (ADR 0040).
 
 ## Consequences
 

@@ -295,15 +295,6 @@ extension RunnerTests {
         message: "dragged"
       )
     case .scroll:
-#if os(iOS)
-      if command.scrollDispatch == .hostSettle {
-        // The digitizer answers once the lift reached the app, while the list can still be
-        // moving. A touch on a moving list first stops it, so the next scroll travels short.
-        let settle = waitForAppQuiescenceIfSupported(activeApp)
-        NSLog("AGENT_DEVICE_RUNNER_HOST_SCROLL_SETTLE settle=%@", settle.logToken)
-        return Response(ok: true, data: DataPayload(message: "settled"))
-      }
-#endif
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
       // AX-free synthesized coordinate lane so scroll keeps working when XCTest cannot serialize
       // the accessibility tree.
@@ -348,22 +339,13 @@ extension RunnerTests {
         guard scrollDurationIsValid(command.durationMs) else {
           return invalidScrollDurationResponse(commandName: "scroll")
         }
-        let start = CGPoint(x: gesture.planFrame.minX + gesture.plan.x1, y: gesture.planFrame.minY + gesture.plan.y1)
-        let end = CGPoint(x: gesture.planFrame.minX + gesture.plan.x2, y: gesture.planFrame.minY + gesture.plan.y2)
-#if os(iOS)
-        if command.scrollDispatch == .host, command.scrollReleaseBehavior != .inertial,
-          let planned = try hostScrollDragResponse(activeApp: activeApp, from: start, to: end, context: scrollContext)
-        {
-          return gesture.attachingEvidence(to: planned)
-        }
-#endif
         return gesture.attachingEvidence(
           to: try executeScrollDragGesture(
             activeApp: activeApp,
-            x: Double(start.x),
-            y: Double(start.y),
-            x2: Double(end.x),
-            y2: Double(end.y),
+            x: gesture.planFrame.minX + gesture.plan.x1,
+            y: gesture.planFrame.minY + gesture.plan.y1,
+            x2: gesture.planFrame.minX + gesture.plan.x2,
+            y2: gesture.planFrame.minY + gesture.plan.y2,
             durationMs: defaults.durationMs,
             message: "scrolled",
             context: scrollContext,
