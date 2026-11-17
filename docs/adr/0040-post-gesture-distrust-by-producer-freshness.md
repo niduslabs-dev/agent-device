@@ -35,27 +35,19 @@ The guarantee that the loop exists for stays: no caller acts on a tree that is s
 A moving list gives reads that differ from each other, so it never forms a quiet pair, whatever its producer.
 Only the second, XCTest-specific guard (a stale tree that holds still) is relaxed, and only for producers that cannot serve one.
 
-### Amendment: iOS Simulator scroll through the digitizer
+### iOS Simulator scroll stays on the XCTest drag
 
-A controlled iOS `scroll` on a local Simulator in the default device set no longer drags through XCTest.
-The runner resolves the frame, the keyboard band, and the plan as before, and answers the planned drag in `hostScrollDrag` instead of sending it (`scrollDispatch: host`).
-The host sends it through the Simulator's digitizer helper (ADR 0005) as one finger, a sample every frame, eased out with the runner's cubic, over `IOS_HOST_SCROLL_DURATION_MS` (300 ms) unless the caller names a duration, then rests 48 ms before the lift. A 200 ms drag was rejected: on Settings, a scroll down then up from the top came back to the top 0 times in 5 at 200 ms and 5 times in 5 at 300 ms.
-The helper answers after a barrier behind the lift, so every move has reached the guest's HID service when the scroll returns.
-Inertial scrolls (`scroll top` and `bottom`), other windows than a portrait one at the screen origin, and other devices keep the runner drag. A digitizer that sent nothing returns the scroll to the runner.
+A controlled iOS `scroll` drags through XCTest on every device, a local Simulator included.
+The runner's drag returns only after XCTest has played its events and the app is idle, so a list never still moves when `scroll` returns.
+The next capture runs the quiet-window loop as above.
 
-This decision is unchanged by the route: the next capture still runs the quiet-window loop, and the gesture marker does not depend on who sent the drag.
-The finger comes to rest before it lifts, so the content stops where it stops. A 2026-11-17 Settings run read the same positions 1 s and 2 s after each scroll, at rest and right after a `back`.
-The open gap below shrinks for this route: the drag's moves reach the app while the host is still sending them, so motion starts before the command returns.
-
-After the drag, the host sends the same `scroll` with `scrollDispatch: hostSettle`, and the runner answers once the app reports idle, bounded by `interactionIdleTimeoutDefault`, as the XCTest drag waits after its own events.
-Without that wait, a list could still be moving when `scroll` returned, most often right after a `back`, and a touch on a moving list first stops it, so the next scroll traveled short.
-On 2026-11-17 the smoke (`press General`, `back`, `scroll down`, `scroll up`, then a batch from `press General`) failed 5 of 5 on nidus.3 because Settings stayed off the top, passed 5 of 5 on nidus.2 (XCTest drag), and passed 3 of 3 with the wait.
-The wait costs 250 to 600 ms, so a host scroll takes about 0.8 to 0.9 s, about 0.2 s more than the XCTest drag it replaced.
+Decision history: on 2026-11-17 a controlled Simulator scroll briefly went through the Simulator's digitizer (ADR 0005), first with no wait after the lift and then with a runner idle wait after it. The first left a list moving after a `back`, so the next scroll traveled short. The second was correct but about 0.2 s slower than the XCTest drag, so the digitizer route was withdrawn.
 
 ## Rejected alternatives
 
 - **Skip the wait when the scroll reports no movement.** The iOS runner's scroll reports no movement fact, and adding one means a runner change with its own device matrix. A content-offset fact also cannot see a list that ignores synthesized scrolls, which is the #1600 case. The producer fact covers the measured cost without a runner change.
 - **Exempt the whole `xctest` backend when the bridge is the usual route.** A bridge refusal falls back to the runner for one capture or one app generation (ADR 0038), so the backend alone does not say which reader served the pair.
+- **Drag a Simulator scroll through the digitizer.** Without a wait after the lift, a list could still move when `scroll` returned, and a touch on a moving list first stops it. With the runner's idle wait after the lift, the route was correct but about 0.2 s slower than the XCTest drag, which already waits.
 - **Shorten the cap for every producer.** The cap is the only defence against the stale runner read, and a shorter cap would bring back #1542 on runner captures.
 
 ## Consequences

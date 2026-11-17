@@ -184,13 +184,6 @@ export type RunnerCommand = {
    * it; `hostTapConfirm` confirms the pop of the tap the host then sent. Absent runs the whole back.
    */
   backInAppPhase?: 'hostTapLookup' | 'hostTapConfirm';
-  /**
-   * `scroll` only: `host` asks for the planned drag in `hostScrollDrag` instead of a runner drag, so
-   * the host sends it through the Simulator's digitizer. The runner still drags itself when the
-   * window is not portrait at the screen origin or the release is inertial. `hostSettle`, sent after
-   * the host's drag, plans and drags nothing and answers once the app is idle.
-   */
-  scrollDispatch?: 'host' | 'hostSettle';
 };
 
 /**
