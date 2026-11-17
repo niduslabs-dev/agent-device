@@ -143,7 +143,8 @@ state. A confirmation without a kept lookup answers `BACK_SWIPE_UNVERIFIED` and 
 other `backInApp` clears the kept state. Every other lookup outcome, the swipe included, runs to the
 end in the `hostTapLookup` request. On either tap route, once the bar shows the pop, the runner waits
 for the app to go idle (bounded at 1 s) before it answers `ok`, so the next touch does not land in
-the pop animation, which UIKit drops.
+the pop animation, which UIKit drops. A swipe whose sample shows the screen changed waits the same
+way.
 
 `scroll` takes `"scrollDispatch": "host"` the same way: for a controlled scroll in a portrait window
 at the screen origin, the runner plans the drag as usual and answers it in `hostScrollDrag` (`x`, `y`,

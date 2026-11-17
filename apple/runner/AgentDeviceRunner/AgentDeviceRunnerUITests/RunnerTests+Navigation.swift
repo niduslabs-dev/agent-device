@@ -213,6 +213,8 @@ extension RunnerTests {
     var gestureMs: Double?
     var justBeforeToAfterMs: Double?
     var changed: NavigationVisualObservation?
+    var popSettle: String?
+    var popSettleMs: Double?
 
     func logLine(outcome: InAppBackOutcome) -> String {
       switch outcome {
@@ -235,6 +237,8 @@ extension RunnerTests {
         "maxCaptureMs=\(ms(maxCaptureMs))",
         "settleSamples=\(settleSamples)",
         "settled=\(settled)",
+        "popSettle=\(popSettle ?? "-")",
+        "popSettleMs=\(ms(popSettleMs))",
       ].joined(separator: " ")
     }
   }
@@ -1052,7 +1056,16 @@ extension RunnerTests {
         )
       )
     }
-    return Self.backSwipeOutcome(observation: observation)
+    let outcome = Self.backSwipeOutcome(observation: observation)
+    if case .performed = outcome {
+      // The changed sample is read 0.1 s after the swipe, while UIKit still animates the pop, and
+      // UIKit drops a touch that lands in the transition. The pop has begun, so the app reports
+      // idle only once it ends, as after a back button tap.
+      let settleStarted = currentUptimeMs()
+      trace.popSettle = waitForAppQuiescenceIfSupported(app).logToken
+      trace.popSettleMs = currentUptimeMs() - settleStarted
+    }
+    return outcome
   }
 
   /// One back sample, with its capture time kept for the trace.

@@ -213,6 +213,8 @@ Once the bar shows the pop, `back` waits, bounded by `interactionIdleTimeoutDefa
 The tree shows the pop about 0.2 s after the tap, and the animation runs about 0.3 s more.
 UIKit drops a touch that lands in the transition, so a direct-touch `press` right after a `back` that answered earlier was silently lost: the 2026-11-17 bench hit it on `back`, `snapshot`, `press @ref`.
 The idle wait is reliable only here, once the pop has begun. Before the tap it returned in 2 to 90 ms on Settings even while a pop was about to start, and took about 470 ms on a screen at rest.
+A swipe that the screen sample confirms waits the same way, since that sample is read 0.1 s after the swipe, mid-pop.
+The swipe answers every `back` once the button lookup is skipped, as on a penalized XCTest channel: without the wait, a `back`, `snapshot`, `press @ref` loop on Settings lost every press that followed a popped swipe (15 of 30 on 2026-11-17).
 
 Rejected alternatives for `back`:
 
