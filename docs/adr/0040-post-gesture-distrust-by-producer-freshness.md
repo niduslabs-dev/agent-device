@@ -47,6 +47,11 @@ This decision is unchanged by the route: the next capture still runs the quiet-w
 The finger comes to rest before it lifts, so the content stops where it stops. A 2026-11-17 Settings run read the same positions 1 s and 2 s after each scroll, at rest and right after a `back`.
 The open gap below shrinks for this route: the drag's moves reach the app while the host is still sending them, so motion starts before the command returns.
 
+After the drag, the host sends the same `scroll` with `scrollDispatch: hostSettle`, and the runner answers once the app reports idle, bounded by `interactionIdleTimeoutDefault`, as the XCTest drag waits after its own events.
+Without that wait, a list could still be moving when `scroll` returned, most often right after a `back`, and a touch on a moving list first stops it, so the next scroll traveled short.
+On 2026-11-17 the smoke (`press General`, `back`, `scroll down`, `scroll up`, then a batch from `press General`) failed 5 of 5 on nidus.3 because Settings stayed off the top, passed 5 of 5 on nidus.2 (XCTest drag), and passed 3 of 3 with the wait.
+The wait costs 250 to 600 ms, so a host scroll takes about 0.8 to 0.9 s, about 0.2 s more than the XCTest drag it replaced.
+
 ## Rejected alternatives
 
 - **Skip the wait when the scroll reports no movement.** The iOS runner's scroll reports no movement fact, and adding one means a runner change with its own device matrix. A content-offset fact also cannot see a list that ignores synthesized scrolls, which is the #1600 case. The producer fact covers the measured cost without a runner change.

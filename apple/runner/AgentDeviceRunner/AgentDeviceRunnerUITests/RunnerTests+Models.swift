@@ -293,6 +293,9 @@ struct Command: Codable {
 /// Who sends a `scroll` drag. Absent is the runner.
 enum ScrollDispatchWire: String, Codable {
   case host
+  /// Sent after the host's drag: the runner plans and drags nothing, and answers once the app is
+  /// idle, so the next touch does not land on a list that is still moving.
+  case hostSettle
 }
 
 /// The drag a `scroll` with `scrollDispatch: host` planned and did not send, in the screen points of

@@ -622,17 +622,19 @@ test('iosRunnerOverrides keeps a physical iPhone scroll on the runner drag at th
   });
 });
 
-test('iosRunnerOverrides drags a planned simulator scroll through the digitizer, not the runner', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValueOnce({
-    message: 'scrollAwaitingHostDrag',
-    x: 201,
-    y: 700,
-    x2: 201,
-    y2: 248,
-    referenceWidth: 402,
-    referenceHeight: 696,
-    hostScrollDrag: { x: 201, y: 700, x2: 201, y2: 248, viewportWidth: 402, viewportHeight: 874 },
-  });
+test('iosRunnerOverrides drags a planned simulator scroll through the digitizer, then waits for the runner to settle', async () => {
+  mockRunAppleRunnerCommand
+    .mockResolvedValueOnce({
+      message: 'scrollAwaitingHostDrag',
+      x: 201,
+      y: 700,
+      x2: 201,
+      y2: 248,
+      referenceWidth: 402,
+      referenceHeight: 696,
+      hostScrollDrag: { x: 201, y: 700, x2: 201, y2: 248, viewportWidth: 402, viewportHeight: 874 },
+    })
+    .mockResolvedValueOnce({ message: 'settled' });
   mockDragThroughSimulatorHid.mockResolvedValueOnce(true);
 
   const { overrides } = iosRunnerOverrides(
@@ -643,7 +645,15 @@ test('iosRunnerOverrides drags a planned simulator scroll through the digitizer,
 
   const result = await overrides.scroll('down');
 
-  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(
+    mockRunAppleRunnerCommand.mock.calls.map(([, command]) => command.scrollDispatch),
+    ['host', 'hostSettle'],
+  );
+  assert.ok(
+    mockDragThroughSimulatorHid.mock.invocationCallOrder[0]! <
+      mockRunAppleRunnerCommand.mock.invocationCallOrder[1]!,
+    'the settle request follows the drag',
+  );
   const [, target] = mockDragThroughSimulatorHid.mock.calls[0]!;
   assert.deepEqual(target.path[0], { x: 201, y: 700, offsetMs: 0 });
   assert.deepEqual(target.path.at(-1), { x: 201, y: 248, offsetMs: 348 });

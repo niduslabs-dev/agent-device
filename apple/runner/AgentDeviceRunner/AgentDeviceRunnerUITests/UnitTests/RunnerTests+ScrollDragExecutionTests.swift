@@ -133,6 +133,21 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, RunnerWireErrorCode.synthesizedGestureNotDispatched)
   }
 
+  /// The settle request that follows a host drag drags nothing: every synthesized drag fails here, and
+  /// it still answers `ok` once the app is idle.
+  @MainActor
+  func testScrollHostSettleDragsNothingAndAnswersOk() throws {
+    let response = try flingWithFailingSynthesis(
+      dispatchedBeforeFailing: true,
+      health: .healthy,
+      command: #"{"command":"scroll","commandId":"scroll-host-settle","direction":"down","scrollDispatch":"hostSettle"}"#
+    )
+
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "settled")
+    XCTAssertNil(response.data?.hostScrollDrag)
+  }
+
   @MainActor
   private func flingWithFailingSynthesis(
     dispatchedBeforeFailing: Bool,

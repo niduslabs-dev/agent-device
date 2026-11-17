@@ -148,7 +148,9 @@ way.
 
 `scroll` takes `"scrollDispatch": "host"` the same way: for a controlled scroll in a portrait window
 at the screen origin, the runner plans the drag as usual and answers it in `hostScrollDrag` (`x`, `y`,
-`x2`, `y2`, `viewportWidth`, `viewportHeight`) with the scroll evidence, and drags nothing.
+`x2`, `y2`, `viewportWidth`, `viewportHeight`) with the scroll evidence, and drags nothing. After
+the host's drag, `"scrollDispatch": "hostSettle"` plans and drags nothing and answers `ok` once the
+app is idle (bounded at 1 s), so the next touch does not land on a list that is still moving.
 
 `backInApp` is the only back command. On iOS the runner first reads the current tree, in the same
 call, for the system back button: a button with the identifier `BackButton` in the app's windows

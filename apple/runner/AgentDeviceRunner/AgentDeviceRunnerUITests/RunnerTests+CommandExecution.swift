@@ -295,6 +295,15 @@ extension RunnerTests {
         message: "dragged"
       )
     case .scroll:
+#if os(iOS)
+      if command.scrollDispatch == .hostSettle {
+        // The digitizer answers once the lift reached the app, while the list can still be
+        // moving. A touch on a moving list first stops it, so the next scroll travels short.
+        let settle = waitForAppQuiescenceIfSupported(activeApp)
+        NSLog("AGENT_DEVICE_RUNNER_HOST_SCROLL_SETTLE settle=%@", settle.logToken)
+        return Response(ok: true, data: DataPayload(message: "settled"))
+      }
+#endif
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
       // AX-free synthesized coordinate lane so scroll keeps working when XCTest cannot serialize
       // the accessibility tree.
