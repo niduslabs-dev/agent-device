@@ -14,13 +14,18 @@ NS_ASSUME_NONNULL_BEGIN
 // Resolves everything the touch needs before its contact: the display that hosts the app
 // (`resolvedWindow`'s display, or the sole screen when it is nil, as for XCTest synthesis), the
 // IOKit HID entry points, and that display's touchscreen sender. Returns nil with `failure` set
-// when any of them is missing; nothing has been sent then.
+// when any of them is missing; nothing has been sent then. Screens the window is not on never
+// refuse the touch: a simulator can list TV-out, CarPlay and resizable screens beside its panel.
 + (nullable instancetype)prepareWithApplication:(id)application
                                  resolvedWindow:(id _Nullable)resolvedWindow
                                         failure:(NSString * _Nullable __autoreleasing * _Nonnull)failure
   NS_SWIFT_NAME(prepare(application:resolvedWindow:failure:));
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// The portrait size in points of the display the touch goes to, as `RunnerScreenPointSize` reads
+// it during preparation. `CGSizeZero` when that read failed; the caller then refuses the touch.
+@property (nonatomic, readonly) CGSize displayPortraitSize;
 
 // Runs one contact. `samples` is the ordered { x, y, offsetMs } path of the contact in portrait
 // screen points, and `screenSize` is that screen's portrait size in points. The call returns after

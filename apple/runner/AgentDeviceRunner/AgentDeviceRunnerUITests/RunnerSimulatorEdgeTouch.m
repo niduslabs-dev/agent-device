@@ -80,14 +80,16 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
                                         failure:(NSString * _Nullable __autoreleasing * _Nonnull)failure {
   *failure = nil;
   NSUInteger displayID = 0;
-  id soleScreen = nil;
+  id screen = nil;
   NSString *displayError = resolvedWindow == nil
-    ? RunnerResolveSoleScreen(application, &soleScreen, &displayID)
-    : RunnerResolveWindowDisplayID(resolvedWindow, &displayID);
+    ? RunnerResolveSoleScreen(application, &screen, &displayID)
+    : RunnerResolveWindowScreen(resolvedWindow, &screen, &displayID);
   if (displayError != nil) {
     *failure = displayError;
     return nil;
   }
+  CGSize measured = RunnerScreenPointSize(screen);
+  CGSize portrait = CGSizeMake(MIN(measured.width, measured.height), MAX(measured.width, measured.height));
   RunnerHIDFunctions functions = {0};
   NSString *hidError = RunnerResolveHIDFunctions(&functions);
   if (hidError != nil) {
@@ -106,16 +108,23 @@ static NSString * _Nullable RunnerResolveTouchscreenSender(
     *failure = senderError;
     return nil;
   }
-  RunnerSimulatorEdgeTouch *touch = [[self alloc] initWithFunctions:functions client:client sender:sender];
+  RunnerSimulatorEdgeTouch *touch = [[self alloc] initWithFunctions:functions
+                                                              client:client
+                                                              sender:sender
+                                                 displayPortraitSize:portrait];
   CFRelease(client);
   return touch;
 }
 
-- (instancetype)initWithFunctions:(RunnerHIDFunctions)functions client:(CFTypeRef)client sender:(uint64_t)sender {
+- (instancetype)initWithFunctions:(RunnerHIDFunctions)functions
+                           client:(CFTypeRef)client
+                           sender:(uint64_t)sender
+              displayPortraitSize:(CGSize)displayPortraitSize {
   if ((self = [super init])) {
     _functions = functions;
     _client = CFRetain(client);
     _sender = sender;
+    _displayPortraitSize = displayPortraitSize;
   }
   return self;
 }

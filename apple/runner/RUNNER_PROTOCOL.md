@@ -257,6 +257,9 @@ swipe follows it at once:
 | Device | the synthesized fling plan (2 pt inside the leading edge to 0.9 of the width, no hold), with every tree and window read it needs | the 200 ms fling | 0.4 s |
 
 On both, every tree and window read happens during that preparation, before the first sample.
+On a simulator, the edge touch goes to the screen that shows the app's window and is sized from
+that screen. Other connected screens (TV-out, CarPlay, a resizable screen) never refuse it. Without
+a window it takes the sole screen, as sampling does.
 
 Settling samples for at most 2 s, plus the capture in flight. On a slow host the budget grows to the first capture, the still span, and one more pause and capture, so a still screen settles instead of always answering `BACK_SWIPE_UNVERIFIED`. A still screen usually settles after
 5 samples, about 0.6 s on a local simulator with 0.1 s captures; with the 0.4 s captures measured
