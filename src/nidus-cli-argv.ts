@@ -48,6 +48,7 @@ const NATIVE_CLI_COMMANDS: ReadonlySet<string> = new Set([
   'appstate',
   'artifacts',
   'audio',
+  'audit',
   'back',
   'batch',
   'boot',
