@@ -34,6 +34,48 @@ extension RunnerTests {
     XCTAssertEqual(status.label, "Back performed")
   }
 
+  /// UIKit drops a touch that lands in the pop's transition, so a swipe that popped waits for the
+  /// app to go idle before it answers, and one that changed nothing does not wait.
+  @MainActor
+  func testInAppBackWaitsForTheAppToGoIdleOnlyAfterASwipeThatPopped() throws {
+    _ = try launchBackFixture([])
+    let unchanged = try countingQuiescenceWaits { try performInAppBack(app: app) }
+    endBackFixture()
+    guard case .unconfirmed = unchanged.result else {
+      return XCTFail("a swipe the app ignores must not read as performed")
+    }
+
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+    let popped = try countingQuiescenceWaits { try performInAppBack(app: app) }
+    guard case .performed = popped.result else {
+      return XCTFail("a left-edge swipe the app answers must read as performed")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+    XCTAssertEqual(popped.waits, unchanged.waits + 1)
+  }
+
+  /// Counts the app quiescence waits while `body` runs; each still waits as before.
+  @MainActor
+  private func countingQuiescenceWaits<T>(_ body: () throws -> T) throws -> (result: T, waits: Int) {
+    let selector = NSSelectorFromString("_waitForQuiescenceAsPreEvent:")
+    let method = try XCTUnwrap(class_getInstanceMethod(XCUIApplication.self, selector))
+    let original = method_getImplementation(method)
+    var waits = 0
+    let counting = imp_implementationWithBlock({ (target: AnyObject, preEvent: Bool) in
+      waits += 1
+      typealias WaitForQuiescence = @convention(c) (AnyObject, Selector, Bool) -> Void
+      unsafeBitCast(original, to: WaitForQuiescence.self)(target, selector, preEvent)
+    } as @convention(block) (AnyObject, Bool) -> Void)
+    method_setImplementation(method, counting)
+    defer {
+      method_setImplementation(method, original)
+      imp_removeBlock(counting)
+    }
+    let result = try body()
+    return (result, waits)
+  }
+
   /// Lists the main screen twice in `XCUIScreen.screens` while `body` runs, as a simulator with an
   /// external screen connected lists two. The cached display size is cleared so the read is live.
   @MainActor
