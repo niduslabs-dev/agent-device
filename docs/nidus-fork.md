@@ -25,6 +25,8 @@ See `git log upstream/main..main` for the exact list. In short:
   restarts.
 - iOS simulator edge swipes, including `back`'s swipe, go to the screen that shows the app's window.
   Upstream refuses them whenever the simulator lists more than one screen (TV-out, CarPlay).
+  When XCTest reads the screen scale as 0 (Device Hub quit while the simulator stays booted), the
+  runner takes the scale from the simulator's device type instead of refusing every edge swipe.
 - A native thin client (below) that runs a command in about 10 ms instead of about 150 ms.
 
 Fork-only files use a `nidus` name so upstream rebases do not conflict:

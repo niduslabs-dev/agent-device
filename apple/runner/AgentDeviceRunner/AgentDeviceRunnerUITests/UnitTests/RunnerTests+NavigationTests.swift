@@ -95,6 +95,52 @@ extension RunnerTests {
     XCTAssertEqual(XCUIScreen.screens.count, 2)
     return try body()
   }
+
+  /// With Device Hub quit and the simulator still booted, XCTest reads the screen's scale as 0 while
+  /// its pixel bounds stay right. The swipe takes the scale from the simulator's device type.
+  @MainActor
+  func testInAppBackSwipesWhenXCTestReadsTheScreenScaleAsZero() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withXCTestScreenReads(scale: 0) { try performInAppBack(app: app) }
+    guard case .performed = outcome else {
+      return XCTFail("a zero XCTest scale on the device type's screen must not refuse the swipe: \(outcome)")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// The device type's scale applies only to the device type's main screen. A zero scale on a screen
+  /// of another pixel size stays unmeasured, so the swipe refuses before any contact.
+  @MainActor
+  func testInAppBackRefusesTheSwipeWhenAZeroScaleScreenIsNotTheDeviceTypesScreen() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withXCTestScreenReads(scale: 0, bounds: CGRect(x: 0, y: 0, width: 1920, height: 1080)) {
+      try performInAppBack(app: app)
+    }
+    guard case .refused(let payload) = outcome else {
+      return XCTFail("an unmeasured screen must refuse the swipe: \(outcome)")
+    }
+    XCTAssertEqual(payload.code, RunnerWireErrorCode.backSwipeNotDispatched)
+    XCTAssertNotEqual(status.label, "Back performed")
+  }
+
+  /// Answers `scale`, and `bounds` when given, for every `XCUIScreen` read while `body` runs. The
+  /// cached display size is cleared so the read is live.
+  @MainActor
+  private func withXCTestScreenReads<T>(scale: CGFloat, bounds: CGRect? = nil, _ body: () throws -> T) throws -> T {
+    var values: [String: AnyObject] = ["scale": NSNumber(value: Double(scale))]
+    if let bounds { values["bounds"] = NSValue(cgRect: bounds) }
+    mainOwned.soleDisplayPortraitSize = nil
+    let restore = try overrideSoleScreenValues(values)
+    defer {
+      restore()
+      mainOwned.soleDisplayPortraitSize = nil
+    }
+    return try body()
+  }
 #endif
 
   /// A swipe the app ignores leaves the screen unchanged, so back refuses with the typed reason and

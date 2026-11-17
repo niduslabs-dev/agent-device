@@ -421,6 +421,25 @@ CGSize RunnerSoleScreenSize(void) {
   return RunnerScreenPointSize(soleScreen);
 }
 
+// The main screen's scale from the simulator's device type, when `pixels` is that screen's pixel
+// size in either orientation; 0 otherwise. CoreSimulator gives every simulator process the
+// `SIMULATOR_MAINSCREEN_*` environment from the device type, and XCTest can read a scale of 0
+// while the bounds stay right: with Device Hub quit and the simulator still booted.
+static CGFloat RunnerDeviceTypeMainScreenScale(CGSize pixels) {
+#if TARGET_OS_SIMULATOR
+  NSDictionary<NSString *, NSString *> *environment = NSProcessInfo.processInfo.environment;
+  double width = environment[@"SIMULATOR_MAINSCREEN_WIDTH"].doubleValue;
+  double height = environment[@"SIMULATOR_MAINSCREEN_HEIGHT"].doubleValue;
+  double scale = environment[@"SIMULATOR_MAINSCREEN_SCALE"].doubleValue;
+  if (!(width > 0 && height > 0 && scale > 0 && isfinite(scale))) return 0;
+  BOOL portrait = fabs(pixels.width - width) < 0.5 && fabs(pixels.height - height) < 0.5;
+  BOOL landscape = fabs(pixels.width - height) < 0.5 && fabs(pixels.height - width) < 0.5;
+  return portrait || landscape ? scale : 0;
+#else
+  return 0;
+#endif
+}
+
 CGSize RunnerScreenPointSize(id screen) {
   __block CGRect bounds = CGRectNull;
   __block CGFloat scale = 0;
@@ -430,6 +449,21 @@ CGSize RunnerScreenPointSize(id screen) {
     NSNumber *scaleValue = [screen valueForKey:@"scale"];
     if ([scaleValue isKindOfClass:NSNumber.class]) scale = scaleValue.doubleValue;
   }];
+  if (exception == nil && AgentDeviceForegroundFrameIsMeasurable(bounds) && !(isfinite(scale) && scale > 0)) {
+    CGFloat deviceTypeScale = RunnerDeviceTypeMainScreenScale(bounds.size);
+    if (deviceTypeScale > 0) {
+      NSLog(
+        @"AGENT_DEVICE_RUNNER_APP_SCREEN_SCALE_FROM_DEVICE_TYPE bounds=(%g,%g %gx%g) xctestScale=%g scale=%g",
+        bounds.origin.x,
+        bounds.origin.y,
+        bounds.size.width,
+        bounds.size.height,
+        scale,
+        deviceTypeScale
+      );
+      scale = deviceTypeScale;
+    }
+  }
   if (exception != nil ||
       !AgentDeviceForegroundFrameIsMeasurable(bounds) || !isfinite(scale) || scale <= 0) {
     NSLog(
