@@ -92,6 +92,16 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowDisplayID(
   NSUInteger *displayID
 );
 
+// `RunnerResolveWindowDisplayID` that also hands back the `XCUIScreen` showing the window, so a
+// caller can measure the display a touch is sent to. The window's own screen is the answer
+// however many screens the device has connected: a simulator can list TV-out, CarPlay and resizable
+// screens beside its panel, and none of them hosts the app's window.
+FOUNDATION_EXPORT NSString * _Nullable RunnerResolveWindowScreen(
+  id window,
+  id _Nullable *screen,
+  NSUInteger *displayID
+);
+
 // Resolves the device's only screen and its `displayID` under the sole-screen rule that synthesis
 // and capture share: an iPhone with one screen always, an iPad only while the AXRuntime probe
 // proves the app fills that screen. Returns nil on success; on refusal it returns a message,
@@ -107,6 +117,10 @@ FOUNDATION_EXPORT NSString * _Nullable RunnerResolveSoleScreen(
 // this measurement. Any failed read or a screen count other than one answers `CGSizeZero`.
 #if TARGET_OS_IOS
 FOUNDATION_EXPORT CGSize RunnerSoleScreenSize(void);
+
+// The same measurement as `RunnerSoleScreenSize` for one given `XCUIScreen`, whatever the screen
+// count. Any failed read answers `CGSizeZero`.
+FOUNDATION_EXPORT CGSize RunnerScreenPointSize(id screen);
 #endif
 
 // What the full-screen proof concluded. The decision is a function of these values, so a test

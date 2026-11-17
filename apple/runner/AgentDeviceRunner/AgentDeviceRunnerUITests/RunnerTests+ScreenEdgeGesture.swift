@@ -40,9 +40,6 @@ extension RunnerTests {
     case .resolved(let resolved): planned = resolved
     case .refused(let outcome): return PreparedTouch(notSent: outcome)
     }
-    guard let portraitSize = edgeTouchDisplayPortraitSize(), let samples = planned.pointerSamples.first else {
-      return PreparedTouch(notSent: Self.unmeasuredSoleDisplayOutcome(gesture: "edge swipe"))
-    }
     let hint = "Retry after the app is foregrounded on a simulator display with a touchscreen."
     var failure: NSString?
     guard let touch = RunnerSimulatorEdgeTouch.prepare(
@@ -51,6 +48,12 @@ extension RunnerTests {
       failure: &failure
     ) else {
       return .notSent(message: (failure as String?) ?? "the edge touch could not be prepared", hint: hint)
+    }
+    guard let portraitSize = edgeTouchDisplayPortraitSize(touch: touch), let samples = planned.pointerSamples.first else {
+      return .notSent(
+        message: "edge swipe could not measure the display that shows the app",
+        hint: "Retry after the app is foregrounded; the runner log records why the display could not be measured."
+      )
     }
     return .ready {
       var touchDown: ObjCBool = false
@@ -78,10 +81,14 @@ extension RunnerTests {
   }
 
   /// The portrait size of the display that hosts the app: the request's lit panel on a foldable,
-  /// whose sides swap with the window's turn, else the sole screen.
+  /// whose sides swap with the window's turn, else the display the touch was prepared for. That is
+  /// the window's own screen, so other screens connected to the simulator never refuse the swipe.
   @MainActor
-  private func edgeTouchDisplayPortraitSize() -> CGSize? {
-    guard let panel = requestLitPanel else { return soleDisplayPortraitSize() }
+  private func edgeTouchDisplayPortraitSize(touch: RunnerSimulatorEdgeTouch) -> CGSize? {
+    guard let panel = requestLitPanel else {
+      let measured = touch.displayPortraitSize
+      return measured.width > 0 && measured.height > 0 ? measured : nil
+    }
     return CGSize(width: min(panel.widthPt, panel.heightPt), height: max(panel.widthPt, panel.heightPt))
   }
 #endif

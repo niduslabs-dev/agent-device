@@ -18,6 +18,43 @@ extension RunnerTests {
     XCTAssertEqual(status.label, "Back performed")
   }
 
+#if targetEnvironment(simulator)
+  /// A simulator can connect TV-out, CarPlay and resizable screens beside its panel, so XCTest lists
+  /// more than one screen. The swipe goes to the screen that shows the app's window, so the extra
+  /// screens never refuse it.
+  @MainActor
+  func testInAppBackSwipesOnTheWindowsScreenBesideAnotherConnectedScreen() throws {
+    let status = try launchBackFixture(["--agent-device-back-regression"])
+    defer { endBackFixture() }
+
+    let outcome = try withAnotherConnectedScreen { try performInAppBack(app: app) }
+    guard case .performed = outcome else {
+      return XCTFail("another connected screen must not refuse the swipe: \(outcome)")
+    }
+    XCTAssertEqual(status.label, "Back performed")
+  }
+
+  /// Lists the main screen twice in `XCUIScreen.screens` while `body` runs, as a simulator with an
+  /// external screen connected lists two. The cached display size is cleared so the read is live.
+  @MainActor
+  private func withAnotherConnectedScreen<T>(_ body: () throws -> T) throws -> T {
+    let selector = #selector(getter: XCUIScreen.screens)
+    let method = try XCTUnwrap(class_getClassMethod(XCUIScreen.self, selector))
+    let stub = try XCTUnwrap(class_getClassMethod(
+      ConnectedScreensStub.self, #selector(ConnectedScreensStub.connectedScreens)
+    ))
+    ConnectedScreensStub.screens = [XCUIScreen.main, XCUIScreen.main]
+    mainOwned.soleDisplayPortraitSize = nil
+    let original = method_setImplementation(method, method_getImplementation(stub))
+    defer {
+      method_setImplementation(method, original)
+      mainOwned.soleDisplayPortraitSize = nil
+    }
+    XCTAssertEqual(XCUIScreen.screens.count, 2)
+    return try body()
+  }
+#endif
+
   /// A swipe the app ignores leaves the screen unchanged, so back refuses with the typed reason and
   /// a hint to press the visible control instead.
   @MainActor
@@ -1056,4 +1093,12 @@ extension RunnerTests {
     )
   }
 }
+
+#if os(iOS) && targetEnvironment(simulator)
+/// Stands in for `XCUIScreen.screens` while `withAnotherConnectedScreen` runs.
+private final class ConnectedScreensStub: NSObject {
+  static var screens: [XCUIScreen] = []
+  @objc class func connectedScreens() -> [XCUIScreen] { screens }
+}
+#endif
 #endif

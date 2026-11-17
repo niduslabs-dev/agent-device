@@ -402,6 +402,18 @@ static Class<AgentDeviceForegroundElement> _Nullable RunnerForegroundElementClas
   return cached;
 }
 
+// Both reads are private KVC, so the caller runs this inside an exception scope.
+static void RunnerReadScreenMetrics(id screen, CGRect *bounds, CGFloat *scale) {
+  NSValue *boundsValue = [screen valueForKey:@"bounds"];
+  [boundsValue getValue:bounds size:sizeof(*bounds)];
+  NSNumber *scaleValue = [screen valueForKey:@"scale"];
+  if ([scaleValue isKindOfClass:NSNumber.class]) *scale = scaleValue.doubleValue;
+}
+
+static BOOL RunnerScreenMetricsAreMeasurable(CGRect bounds, CGFloat scale) {
+  return AgentDeviceForegroundFrameIsMeasurable(bounds) && isfinite(scale) && scale > 0;
+}
+
 CGSize RunnerSoleScreenSize(void) {
   __block NSUInteger screenCount = 0;
   __block CGRect bounds = CGRectNull;
@@ -410,17 +422,33 @@ CGSize RunnerSoleScreenSize(void) {
     NSArray<XCUIScreen *> *screens = XCUIScreen.screens;
     screenCount = screens.count;
     if (screenCount != 1) return;
-    XCUIScreen *screen = screens.firstObject;
-    NSValue *boundsValue = [screen valueForKey:@"bounds"];
-    [boundsValue getValue:&bounds size:sizeof(bounds)];
-    NSNumber *scaleValue = [screen valueForKey:@"scale"];
-    if ([scaleValue isKindOfClass:NSNumber.class]) scale = scaleValue.doubleValue;
+    RunnerReadScreenMetrics(screens.firstObject, &bounds, &scale);
   }];
-  if (exception != nil || screenCount != 1 ||
-      !AgentDeviceForegroundFrameIsMeasurable(bounds) || !isfinite(scale) || scale <= 0) {
+  if (exception != nil || screenCount != 1 || !RunnerScreenMetricsAreMeasurable(bounds, scale)) {
     NSLog(
       @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=sole-screen-size screens=%lu bounds=(%g,%g %gx%g) scale=%g raised=%@",
       (unsigned long)screenCount,
+      bounds.origin.x,
+      bounds.origin.y,
+      bounds.size.width,
+      bounds.size.height,
+      scale,
+      exception != nil ? @"yes" : @"no"
+    );
+    return CGSizeZero;
+  }
+  return CGSizeMake(bounds.size.width / scale, bounds.size.height / scale);
+}
+
+CGSize RunnerScreenPointSize(id screen) {
+  __block CGRect bounds = CGRectNull;
+  __block CGFloat scale = 0;
+  NSString *exception = [RunnerObjCExceptionCatcher catchException:^{
+    RunnerReadScreenMetrics(screen, &bounds, &scale);
+  }];
+  if (exception != nil || !RunnerScreenMetricsAreMeasurable(bounds, scale)) {
+    NSLog(
+      @"AGENT_DEVICE_RUNNER_APP_SCREEN_UNRESOLVED stage=screen-size bounds=(%g,%g %gx%g) scale=%g raised=%@",
       bounds.origin.x,
       bounds.origin.y,
       bounds.size.width,
@@ -537,6 +565,12 @@ NSString * _Nullable RunnerResolveSoleScreen(
 }
 
 NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *displayID) {
+  id screen = nil;
+  return RunnerResolveWindowScreen(window, &screen, displayID);
+}
+
+NSString * _Nullable RunnerResolveWindowScreen(id window, id _Nullable *screen, NSUInteger *displayID) {
+  *screen = nil;
   __block CGRect frame = CGRectNull;
   NSString *frameException = [RunnerObjCExceptionCatcher catchException:^{
     NSValue *frameValue = [window valueForKey:@"frame"];
@@ -556,16 +590,17 @@ NSString * _Nullable RunnerResolveWindowDisplayID(id window, NSUInteger *display
       RunnerApplicationScreenFailureDescription(RunnerApplicationScreenFailureUnresolvedWindow)
     ];
   }
-  id screen = nil;
+  id resolvedScreen = nil;
   NSUInteger resolvedDisplayID = 0;
   RunnerApplicationScreenFailure failure =
-    RunnerReadResolvedWindowScreen(window, frame, &screen, &resolvedDisplayID);
+    RunnerReadResolvedWindowScreen(window, frame, &resolvedScreen, &resolvedDisplayID);
   if (failure != RunnerApplicationScreenFailureNone) {
     return [NSString stringWithFormat:
       @"private XCTest event synthesis unavailable: %@",
       RunnerApplicationScreenFailureDescription(failure)
     ];
   }
+  *screen = resolvedScreen;
   *displayID = resolvedDisplayID;
   return nil;
 }
